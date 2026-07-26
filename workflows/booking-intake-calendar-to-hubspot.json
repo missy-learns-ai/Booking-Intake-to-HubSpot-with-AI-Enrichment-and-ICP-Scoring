@@ -1,1074 +1,1751 @@
 {
-  "id": "{{WORKFLOW_ID}}",
-  "meta": {
-    "instanceId": "{{N8N_INSTANCE_ID}}",
-    "templateCredsSetupCompleted": true
-  },
-  "name": "Calendly Booking Intake to HubSpot with AI Enrichment and ICP Scoring",
-  "tags": [],
+  "name": "Booking Intake – Calendar to HubSpot",
   "nodes": [
     {
-      "id": "3f164a5a-f09e-4744-b948-093bac39b7e9",
-      "name": "Check Valid Prospect Booking",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        -112,
-        -488
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
-            "version": 3,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "a8b807af-4758-4a52-8eb4-a6039a9f24ef",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
               "operator": {
                 "type": "string",
                 "operation": "notEmpty",
                 "singleValue": true
-              },
-              "leftValue": "={{ $json.email }}",
-              "rightValue": ""
+              }
             },
             {
               "id": "3758f25e-48b6-4df3-895a-4d4c88ceff0c",
+              "leftValue": "={{ $json.booking_event_id }}",
+              "rightValue": "",
               "operator": {
                 "type": "string",
                 "operation": "notEmpty",
                 "singleValue": true
-              },
-              "leftValue": "={{ $json.booking_event_id }}",
-              "rightValue": ""
+              }
             },
             {
               "id": "c0dc4580-8ab7-4d5b-b760-d8076b0ce50a",
+              "leftValue": "={{ $json.email_subject }}",
+              "rightValue": "New Event:",
               "operator": {
                 "type": "string",
                 "operation": "contains"
-              },
-              "leftValue": "={{ $json.email_subject }}",
-              "rightValue": "New Event:"
+              }
             },
             {
               "id": "4fc8918a-3bac-4eb5-84a0-5fb11cb6e804",
+              "leftValue": "={{ $json.extraction_status }}",
+              "rightValue": "complete",
               "operator": {
                 "type": "string",
                 "operation": "equals"
-              },
-              "leftValue": "={{ $json.extraction_status }}",
-              "rightValue": "complete"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "typeVersion": 2.3
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -16,
+        -304
+      ],
+      "id": "3f164a5a-f09e-4744-b948-093bac39b7e9",
+      "name": "Valid Prospect Booking?"
     },
     {
-      "id": "8f9e677e-d633-4258-b088-6b4ff136329f",
-      "name": "Gmail Sent Trigger",
-      "type": "n8n-nodes-base.gmailTrigger",
-      "position": [
-        -560,
-        -488
-      ],
       "parameters": {
-        "filters": {
-          "q": "New Event",
-          "sender": "{{CALENDLY_NOTIFICATION_EMAIL}}"
-        },
         "pollTimes": {
           "item": [
             {
               "mode": "everyMinute"
             }
           ]
+        },
+        "filters": {
+          "q": "New Event",
+          "sender": "{{CALENDLY_NOTIFICATION_EMAIL}}"
         }
       },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        -304
+      ],
+      "id": "8f9e677e-d633-4258-b088-6b4ff136329f",
+      "name": "Gmail Trigger",
       "credentials": {
         "gmailOAuth2": {
           "id": "{{GMAIL_CREDENTIAL_ID}}",
           "name": "{{GMAIL_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 1.3
+      }
     },
     {
-      "id": "2d5290be-2473-4334-9427-ea9cf672d9cf",
-      "name": "Parse Booking From Calendly",
-      "type": "n8n-nodes-base.code",
-      "position": [
-        -336,
-        -488
-      ],
       "parameters": {
         "jsCode": "const message = $json;\n\nconst subject = String(\n  message.Subject ||\n  message.subject ||\n  ''\n).trim();\n\nconst snippet = String(\n  message.snippet ||\n  ''\n).trim();\n\nconst bookingEventId = String(message.id || '');\nconst gmailThreadId = String(message.threadId || '');\n\nfunction capture(text, pattern) {\n  const match = String(text || '').match(pattern);\n  return match ? String(match[1] || '').trim() : '';\n}\n\nfunction titleCase(value) {\n  return String(value || '')\n    .replace(/[._-]+/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .replace(/\\b\\w/g, character => character.toUpperCase());\n}\n\n/*\nExample subject:\nNew Event: Sample Prospect - 03:30 Thu, 23 Jul 2026 - 30 Minute Meeting\n*/\nconst subjectMatch = subject.match(\n  /^New Event:\\s*(.+?)\\s*-\\s*(\\d{1,2}:\\d{2}(?:\\s*[AP]M)?)\\s+[A-Za-z]{3,9},\\s*(\\d{1,2}\\s+[A-Za-z]{3,9}\\s+\\d{4})\\s*-\\s*(.+)$/i\n);\n\nconst subjectProspectName = subjectMatch\n  ? subjectMatch[1].trim()\n  : '';\n\nconst subjectTime = subjectMatch\n  ? subjectMatch[2].trim()\n  : '';\n\nconst subjectDate = subjectMatch\n  ? subjectMatch[3].trim()\n  : '';\n\nconst subjectEventType = subjectMatch\n  ? subjectMatch[4].trim()\n  : '';\n\nconst prospectName =\n  capture(\n    snippet,\n    /Invitee:\\s*(.+?)\\s+Invitee Email:/i\n  ) ||\n  subjectProspectName;\n\nconst email = capture(\n  snippet,\n  /Invitee Email:\\s*([^\\s]+@[^\\s]+)\\s+Event Date\\/Time:/i\n).toLowerCase();\n\nconst eventType =\n  capture(\n    snippet,\n    /Event Type:\\s*(.+?)\\s+Invitee:/i\n  ) ||\n  subjectEventType ||\n  'Calendly meeting';\n\nconst nameParts = prospectName\n  .split(/\\s+/)\n  .filter(Boolean);\n\nconst firstName = nameParts.shift() || '';\nconst lastName = nameParts.join(' ');\n\nconst emailDomain = email.includes('@')\n  ? email.split('@')[1]\n  : '';\n\nconst freeEmailDomains = new Set([\n  'gmail.com',\n  'googlemail.com',\n  'yahoo.com',\n  'outlook.com',\n  'hotmail.com',\n  'icloud.com',\n  'proton.me',\n  'protonmail.com'\n]);\n\nconst isFreeEmail =\n  Boolean(emailDomain) &&\n  freeEmailDomains.has(emailDomain);\n\nconst companyDomain = isFreeEmail\n  ? ''\n  : emailDomain;\n\nconst companyName = companyDomain\n  ? titleCase(companyDomain.split('.')[0])\n  : '';\n\n/* Parse meeting date and time from subject */\nlet meetingStart = '';\nlet meetingParseStatus = 'failed';\nlet meetingParseError = '';\n\nif (!subjectMatch) {\n  meetingParseError =\n    'Could not extract meeting date and time from the email subject.';\n} else {\n  const hasMeridiem =\n    /\\b(?:AM|PM)\\b/i.test(subjectTime);\n\n  const format = hasMeridiem\n    ? 'd LLL yyyy h:mm a'\n    : 'd LLL yyyy HH:mm';\n\n  const dateTimeText =\n    `${subjectDate} ${subjectTime}`;\n\n  const parsedDateTime = DateTime.fromFormat(\n    dateTimeText,\n    format,\n    {\n      locale: 'en'\n    }\n  );\n\n  if (parsedDateTime.isValid) {\n    meetingStart = parsedDateTime.toISO();\n    meetingParseStatus = 'success';\n  } else {\n    meetingParseError =\n      parsedDateTime.invalidExplanation ||\n      'Invalid meeting date or time.';\n  }\n}\n\n/* Validate required extracted fields */\nconst missingFields = [];\n\nif (!prospectName) {\n  missingFields.push('prospect_name');\n}\n\nif (!email) {\n  missingFields.push('email');\n}\n\nif (!bookingEventId) {\n  missingFields.push('booking_event_id');\n}\n\nif (!meetingStart) {\n  missingFields.push('meeting_start');\n}\n\nconst extractionStatus =\n  missingFields.length === 0\n    ? 'complete'\n    : 'incomplete';\n\nreturn [\n  {\n    json: {\n      booking_event_id: bookingEventId,\n      gmail_thread_id: gmailThreadId,\n\n      meeting_title: eventType,\n      meeting_start: meetingStart,\n      meeting_parse_status: meetingParseStatus,\n      meeting_parse_error: meetingParseError,\n\n      prospect_name: prospectName,\n      first_name: firstName,\n      last_name: lastName,\n      email,\n\n      email_domain: emailDomain,\n      is_free_email: isFreeEmail,\n      company_domain: companyDomain,\n      company_name: companyName,\n\n      booking_notes: '',\n      booking_source: 'Calendly notification email',\n\n      email_subject: subject,\n\n      extraction_status: extractionStatus,\n      missing_fields: missingFields,\n\n      processed_at: new Date().toISOString()\n    }\n  }\n];"
       },
-      "typeVersion": 2
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        -304
+      ],
+      "id": "2d5290be-2473-4334-9427-ea9cf672d9cf",
+      "name": "Parse Calendly Booking"
     },
     {
-      "id": "1537c6bb-9b68-4ea1-bb36-3aa1e5ac0a6a",
-      "name": "Set Manual Review Status",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        128,
-        -80
-      ],
       "parameters": {
-        "options": {},
         "assignments": {
           "assignments": [
             {
               "id": "67e59d85-01aa-4846-911d-027c0d730b52",
               "name": "processing_status",
-              "type": "string",
-              "value": "rejected"
+              "value": "rejected",
+              "type": "string"
             },
             {
               "id": "80b01cad-171b-4fdb-99d2-3056c9177408",
               "name": "processing_reason",
-              "type": "string",
-              "value": "Missing or invalid booking data"
+              "value": "Missing or invalid booking data",
+              "type": "string"
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "typeVersion": 3.4
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        32
+      ],
+      "id": "1537c6bb-9b68-4ea1-bb36-3aa1e5ac0a6a",
+      "name": "Manual Review"
     },
     {
-      "id": "8e0791ad-491e-4c99-8de7-77c9f170a339",
-      "name": "Post to HubSpot Contacts API",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        112,
-        -584
-      ],
       "parameters": {
-        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/batch/upsert",
         "method": "POST",
-        "options": {},
-        "jsonBody": "={\n  \"inputs\": [\n    {\n      \"idProperty\": \"email\",\n      \"id\": \"{{ $json.email }}\",\n      \"properties\": {\n        \"email\": \"{{ $json.email }}\",\n        \"firstname\": \"{{ $json.first_name }}\",\n        \"lastname\": \"{{ $json.last_name }}\",\n        \"lifecyclestage\": \"lead\",\n        \"lead_source\": \"Inbound\",\n        \"booking_event_id\": \"{{ $json.booking_event_id }}\",\n        \"meeting_start\": \"{{ $json.meeting_start }}\"\n      }\n    }\n  ]\n}",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/batch/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
         "sendBody": true,
         "specifyBody": "json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "hubspotAppToken"
+        "jsonBody": "={\n  \"inputs\": [\n    {\n      \"idProperty\": \"email\",\n      \"id\": \"{{ $json.email }}\",\n      \"properties\": {\n        \"email\": \"{{ $json.email }}\",\n        \"firstname\": \"{{ $json.first_name }}\",\n        \"lastname\": \"{{ $json.last_name }}\",\n        \"lifecyclestage\": \"lead\",\n        \"lead_source\": \"Inbound\",\n        \"booking_event_id\": \"{{ $json.booking_event_id }}\",\n        \"meeting_start\": \"{{ $json.meeting_start }}\"\n      }\n    }\n  ]\n}",
+        "options": {}
       },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        -320
+      ],
+      "id": "8e0791ad-491e-4c99-8de7-77c9f170a339",
+      "name": "Upsert HubSpot Contact",
       "credentials": {
         "hubspotAppToken": {
           "id": "{{HUBSPOT_CREDENTIAL_ID}}",
           "name": "{{HUBSPOT_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 4.4
+      }
     },
     {
-      "id": "b96369bc-64f3-4bbc-8786-dd52fd00f4ce",
-      "name": "Prepare HubSpot Notes Data",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        336,
-        -584
-      ],
       "parameters": {
-        "options": {},
+        "content": "## Gmail Trigger\n\nStarts the workflow when a Calendly booking email is received in Gmail.\n\nThis node should filter only Calendly booking notifications so unrelated emails do not enter the workflow.",
+        "height": 336,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -848,
+        -480
+      ],
+      "typeVersion": 1,
+      "id": "1e44f579-4b3e-4cce-8bb8-d1200bc62b58",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
         "assignments": {
           "assignments": [
             {
               "id": "59479c63-77e9-45a4-9a68-d47d758e399d",
               "name": "contact_id",
-              "type": "string",
-              "value": "={{ $json.results[0].id }}"
+              "value": "={{ $json.results[0].id }}",
+              "type": "string"
             },
             {
               "id": "59baf9ad-dd75-479f-9a23-55a5ba8d4a08",
               "name": "booking_notes",
-              "type": "string",
-              "value": "={{ $('Parse Booking From Calendly').item.json.booking_notes }}"
+              "value": "={{ $('Parse Calendly Booking').item.json.booking_notes }}",
+              "type": "string"
             },
             {
               "id": "131c0c64-c039-4427-9001-3cde5984645c",
               "name": "meeting_start",
-              "type": "string",
-              "value": "={{ $('Parse Booking From Calendly').first().json.meeting_start }}"
+              "value": "={{ $('Parse Calendly Booking').first().json.meeting_start }}",
+              "type": "string"
             },
             {
               "id": "66a871ff-b684-4882-868c-adc9acb1e294",
               "name": "booking_event_id",
-              "type": "string",
-              "value": "={{ $('Parse Booking From Calendly').first().json.booking_event_id }}"
+              "value": "={{ $('Parse Calendly Booking').first().json.booking_event_id }}",
+              "type": "string"
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "typeVersion": 3.4
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        -240
+      ],
+      "id": "b96369bc-64f3-4bbc-8786-dd52fd00f4ce",
+      "name": "HubSpot note"
     },
     {
-      "id": "3088ab8d-d836-4196-8cdf-8f3668977f33",
-      "name": "Check Booking Notes Presence",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        560,
-        -584
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
-            "version": 3,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "54c9a4a7-5c58-46d7-ab18-d60b7c9cd6f3",
+              "leftValue": "={{Boolean($json.booking_notes)}}",
+              "rightValue": "",
               "operator": {
                 "type": "boolean",
                 "operation": "true",
                 "singleValue": true
-              },
-              "leftValue": "={{Boolean($json.booking_notes)}}",
-              "rightValue": ""
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "typeVersion": 2.3
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        -240
+      ],
+      "id": "3088ab8d-d836-4196-8cdf-8f3668977f33",
+      "name": "Booking Notes Present?"
     },
     {
-      "id": "cd5f6c16-4ce2-48c1-8aec-297662662188",
-      "name": "Post to HubSpot Notes API",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        784,
-        -584
-      ],
       "parameters": {
-        "url": "=https://api.hubapi.com/crm/v3/objects/notes",
         "method": "POST",
-        "options": {},
-        "jsonBody": "={\n  \"properties\": {\n    \"hs_timestamp\": \"{{ $now.toISO() }}\",\n    \"hs_note_body\": \"Calendly booking\\n\\nMeeting start: {{ $json.meeting_start }}\\n\\nBooking notes:\\n{{ $json.booking_notes }}\\n\\nBooking event ID: {{ $json.booking_event_id }}\"\n  },\n  \"associations\": [\n    {\n      \"to\": {\n        \"id\": \"{{ $json.contact_id }}\"\n      },\n      \"types\": [\n        {\n          \"associationCategory\": \"HUBSPOT_DEFINED\",\n          \"associationTypeId\": 202\n        }\n      ]\n    }\n  ]\n}",
+        "url": "=https://api.hubapi.com/crm/v3/objects/notes",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
         "sendBody": true,
         "specifyBody": "json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "hubspotAppToken"
+        "jsonBody": "={\n  \"properties\": {\n    \"hs_timestamp\": \"{{ $now.toISO() }}\",\n    \"hs_note_body\": \"Calendly booking\\n\\nMeeting start: {{ $json.meeting_start }}\\n\\nBooking notes:\\n{{ $json.booking_notes }}\\n\\nBooking event ID: {{ $json.booking_event_id }}\"\n  },\n  \"associations\": [\n    {\n      \"to\": {\n        \"id\": \"{{ $json.contact_id }}\"\n      },\n      \"types\": [\n        {\n          \"associationCategory\": \"HUBSPOT_DEFINED\",\n          \"associationTypeId\": 202\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
       },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1264,
+        -256
+      ],
+      "id": "cd5f6c16-4ce2-48c1-8aec-297662662188",
+      "name": "Create HubSpot Booking Note",
       "credentials": {
         "hubspotAppToken": {
           "id": "{{HUBSPOT_CREDENTIAL_ID}}",
           "name": "{{HUBSPOT_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 4.4
+      }
     },
     {
-      "id": "a5372634-d90b-44b0-ba1f-2c4a5f5026db",
-      "name": "Check for Business Email",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        1008,
-        -584
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
-            "version": 3,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "b6201056-3d1e-4d63-be11-6fdeb7f31f47",
+              "leftValue": "={{\n  !$('Parse Calendly Booking').first().json.is_free_email\n  &&\n  Boolean(\n    $('Parse Calendly Booking').first().json.company_domain\n  )\n}}",
+              "rightValue": "",
               "operator": {
                 "type": "boolean",
                 "operation": "true",
                 "singleValue": true
-              },
-              "leftValue": "={{\n  !$('Parse Booking From Calendly').first().json.is_free_email\n  &&\n  Boolean(\n    $('Parse Booking From Calendly').first().json.company_domain\n  )\n}}",
-              "rightValue": ""
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "typeVersion": 2.3
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1536,
+        -256
+      ],
+      "id": "a5372634-d90b-44b0-ba1f-2c4a5f5026db",
+      "name": "Business Email?"
     },
     {
-      "id": "e114fd77-e437-40f0-93e6-fb0e72a73c59",
-      "name": "Check Enrichment Success",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        3264,
-        -708
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
-            "version": 3,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "32e5e535-0326-4d98-8f1e-a3bb94835a8d",
-              "operator": {
-                "name": "filter.operator.equals",
-                "type": "string",
-                "operation": "equals"
-              },
               "leftValue": "={{ $json.enrichment_status }}",
-              "rightValue": "enriched"
+              "rightValue": "enriched",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "typeVersion": 2.3
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4832,
+        -1168
+      ],
+      "id": "e114fd77-e437-40f0-93e6-fb0e72a73c59",
+      "name": "Enrichment Found?"
     },
     {
-      "id": "f96485a7-8b6f-46e6-83bf-0b59991e0cd5",
-      "name": "Compute ICP Score",
-      "type": "n8n-nodes-base.code",
-      "position": [
-        3488,
-        -756
-      ],
       "parameters": {
         "jsCode": "const lead = $json;\n\nlet score = 0;\nconst reasons = [];\n\n/*\n  Company size:\n  example-company may be especially relevant to growing technology\n  companies that need compliance for enterprise sales.\n*/\nconst employeeCount = Number(lead.employee_count || 0);\n\nif (employeeCount >= 20 && employeeCount <= 200) {\n  score += 25;\n  reasons.push('Company has 20–200 employees: +25');\n} else if (employeeCount >= 10 && employeeCount < 20) {\n  score += 10;\n  reasons.push('Company has 10–19 employees: +10');\n} else if (employeeCount > 200 && employeeCount <= 500) {\n  score += 15;\n  reasons.push('Company has 201–500 employees: +15');\n}\n\n/*\n  Industry fit\n*/\nconst industry = String(lead.industry || '').toLowerCase();\n\nif (\n  industry.includes('software') ||\n  industry.includes('saas') ||\n  industry.includes('artificial intelligence') ||\n  industry.includes('cybersecurity') ||\n  industry.includes('technology')\n) {\n  score += 25;\n  reasons.push('Technology-sector fit: +25');\n}\n\n/*\n  Enterprise selling motion\n*/\nif (lead.sells_to_enterprise === true) {\n  score += 25;\n  reasons.push('Sells to enterprise customers: +25');\n}\n\n/*\n  Geography\n*/\nconst europeanCountries = new Set([\n  'France',\n  'Germany',\n  'Netherlands',\n  'Belgium',\n  'Spain',\n  'Italy',\n  'Portugal',\n  'Ireland',\n  'United Kingdom',\n  'Sweden',\n  'Denmark',\n  'Norway',\n  'Finland',\n  'Switzerland',\n  'Austria',\n  'Poland'\n]);\n\nif (europeanCountries.has(lead.country)) {\n  score += 10;\n  reasons.push('European company: +10');\n}\n\n/*\n  Growth/funding signal\n*/\nconst fundingStage = String(\n  lead.funding_stage || ''\n).toLowerCase();\n\nif (\n  fundingStage.includes('seed') ||\n  fundingStage.includes('series a') ||\n  fundingStage.includes('series b') ||\n  fundingStage.includes('series c')\n) {\n  score += 15;\n  reasons.push('Growth-stage funding signal: +15');\n}\n\nscore = Math.min(score, 100);\n\nlet tier = 'Low';\n\nif (score >= 70) {\n  tier = 'High';\n} else if (score >= 40) {\n  tier = 'Medium';\n}\n\nreturn [\n  {\n    json: {\n      ...lead,\n      icp_score: score,\n      icp_tier: tier,\n      icp_reasons: reasons.join('\\n')\n    }\n  }\n];"
       },
-      "typeVersion": 2
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5264,
+        -1488
+      ],
+      "id": "f96485a7-8b6f-46e6-83bf-0b59991e0cd5",
+      "name": "Calculate ICP Score"
     },
     {
-      "id": "357743ad-5e32-4058-9538-f0495ddd614f",
-      "name": "Patch HubSpot Contact ICP",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        3712,
-        -756
-      ],
       "parameters": {
-        "url": "={{\n  'https://api.hubapi.com/crm/v3/objects/contacts/' + $json.contact_id\n}}",
         "method": "PATCH",
-        "options": {},
-        "jsonBody": "={\n  \"properties\": {\n    \"icp_score\": \"{{ $json.icp_score }}\"\n  }\n}",
+        "url": "={{\n  'https://api.hubapi.com/crm/v3/objects/contacts/' + $json.contact_id\n}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
         "sendBody": true,
         "specifyBody": "json",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "hubspotAppToken"
+        "jsonBody": "={\n  \"properties\": {\n    \"icp_score\": \"{{ $json.icp_score }}\"\n  }\n}",
+        "options": {}
       },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5600,
+        -1360
+      ],
+      "id": "357743ad-5e32-4058-9538-f0495ddd614f",
+      "name": "Update Contact ICP",
       "credentials": {
         "hubspotAppToken": {
           "id": "{{HUBSPOT_CREDENTIAL_ID}}",
           "name": "{{HUBSPOT_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 4.4
+      }
     },
     {
-      "id": "2e122755-e2a4-49bd-925a-78aebdfa131b",
-      "name": "Set Meeting Briefing Details",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        3936,
-        -756
-      ],
       "parameters": {
-        "options": {},
         "assignments": {
           "assignments": [
             {
               "id": "a83f6dbd-c682-4b4f-9757-6ab2fb23d0d4",
               "name": "meeting_briefing",
-              "type": "string",
-              "value": "={{\n`New discovery booking\n\nContact: ${$('Parse Booking From Calendly').first().json.prospect_name || 'Unknown'}\nEmail: ${$('Parse Booking From Calendly').first().json.email || 'Unknown'}\nCompany: ${$('Compute ICP Score').first().json.company_name || 'Unknown'}\nIndustry: ${$('Compute ICP Score').first().json.industry || 'Unknown'}\nEmployees: ${$('Compute ICP Score').first().json.employee_count || 'Unknown'}\nCountry: ${$('Compute ICP Score').first().json.country || 'Unknown'}\nFunding: ${$('Compute ICP Score').first().json.funding_stage || 'Unknown'}\n\nICP score: ${$('Compute ICP Score').first().json.icp_score ?? 'Not calculated'}/100\nICP tier: ${$('Compute ICP Score').first().json.icp_tier || 'Unknown'}\n\nWhy:\n${$('Compute ICP Score').first().json.icp_reasons || 'No scoring reasons available'}\n\nMeeting:\n${$('Parse Booking From Calendly').first().json.meeting_start || 'Unknown'}\n\nBooking note:\n${$('Prepare HubSpot Notes Data').first().json.booking_notes\n  || 'No preparation note provided'}\n\nSuggested discovery questions:\n1. What triggered the ISO 27001 project?\n2. Is a customer or contract currently blocked?\n3. What is the target certification date?\n4. Who will own the project internally?\n5. What security work already exists?`\n}}"
+              "value": "={{\n`New discovery booking\n\nContact: ${$('Parse Calendly Booking').item.json.prospect_name || 'Unknown'}\nEmail: ${$('Parse Calendly Booking').item.json.email || 'Unknown'}\nCompany: ${$('Calculate ICP Score').item.json.company_name\n  || $('Calculate ICP Score').item.json.enriched_company_name\n  || 'Unknown'}\nIndustry: ${$('Calculate ICP Score').item.json.industry || 'Unknown'}\nEmployees: ${$('Calculate ICP Score').item.json.employee_count ?? 'Unknown'}\nCountry: ${$('Calculate ICP Score').item.json.country || 'Unknown'}\nFunding: ${$('Calculate ICP Score').item.json.funding_stage || 'Unknown'}\n\nICP score: ${$('Calculate ICP Score').item.json.icp_score ?? 'Not calculated'}/100\nICP tier: ${$('Calculate ICP Score').item.json.icp_tier || 'Unknown'}\n\nWhy:\n${$('Calculate ICP Score').item.json.icp_reasons || 'No scoring reasons available'}\n\nMeeting:\n${DateTime.fromISO(\n  $('Parse Calendly Booking').item.json.meeting_start\n).toFormat(\"cccc, LLLL d, yyyy 'at' h:mm a ZZZZ\")}\n\nBooking note:\n${$('Parse Calendly Booking').item.json.booking_notes\n  || $('HubSpot note').item.json.booking_notes\n  || 'No preparation note provided'}\n`\n}}",
+              "type": "string"
             }
           ]
-        }
-      },
-      "typeVersion": 3.4
-    },
-    {
-      "id": "ce61946f-3326-4d64-9669-c104c01d5e90",
-      "name": "Send Email via Gmail",
-      "type": "n8n-nodes-base.gmail",
-      "position": [
-        4160,
-        -756
-      ],
-      "webhookId": "{{SEND_EMAIL_VIA_GMAIL_WEBHOOK_ID}}",
-      "parameters": {
-        "sendTo": "{{MEETING_BRIEFING_RECIPIENT_EMAIL}}",
-        "message": "={{\n(() => {\n  const booking = $('Parse Booking From Calendly').first().json;\n  const scored = $('Compute ICP Score').first().json;\n  const note = $('Prepare HubSpot Notes Data').first().json.booking_notes\n    || 'No preparation note provided';\n\n  const meeting = booking.meeting_start\n    ? DateTime.fromISO(booking.meeting_start).toFormat('dd LLL yyyy, HH:mm')\n    : 'Unknown';\n\n  const tier = scored.icp_tier || 'Unscored';\n\n  const tierStyles = {\n    High: {\n      background: '#DCFCE7',\n      text: '#166534',\n      border: '#86EFAC'\n    },\n    Medium: {\n      background: '#FEF3C7',\n      text: '#92400E',\n      border: '#FCD34D'\n    },\n    Low: {\n      background: '#FEE2E2',\n      text: '#991B1B',\n      border: '#FCA5A5'\n    },\n    Unscored: {\n      background: '#E5E7EB',\n      text: '#374151',\n      border: '#D1D5DB'\n    }\n  };\n\n  const tierStyle = tierStyles[tier] || tierStyles.Unscored;\n\n  const reasons = String(\n    scored.icp_reasons || 'No scoring reasons available'\n  )\n    .split('\\n')\n    .filter(Boolean)\n    .map(reason => `\n      <li style=\"margin: 0 0 8px 0;\">\n        ${reason}\n      </li>\n    `)\n    .join('');\n\n  return `\n<!DOCTYPE html>\n<html>\n  <body style=\"margin:0;padding:0;background:#F3F4F6;font-family:Arial,Helvetica,sans-serif;color:#111827;\">\n    <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"background:#F3F4F6;padding:24px 12px;\">\n      <tr>\n        <td align=\"center\">\n\n          <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"max-width:680px;background:#FFFFFF;border-radius:16px;overflow:hidden;border:1px solid #E5E7EB;\">\n\n            <tr>\n              <td style=\"background:#0F2742;padding:28px 32px;\">\n                <div style=\"font-size:13px;letter-spacing:1.4px;text-transform:uppercase;color:#93C5FD;font-weight:700;margin-bottom:8px;\">\n                  New inbound opportunity\n                </div>\n\n                <div style=\"font-size:28px;line-height:1.2;font-weight:700;color:#FFFFFF;\">\n                  New discovery booking\n                </div>\n\n                <div style=\"font-size:15px;color:#CBD5E1;margin-top:8px;\">\n                  A prospect booked time through Calendly\n                </div>\n              </td>\n            </tr>\n\n            <tr>\n              <td style=\"padding:28px 32px 12px 32px;\">\n\n                <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">\n                  <tr>\n                    <td style=\"padding:0 0 18px 0;\">\n                      <span style=\"\n                        display:inline-block;\n                        padding:7px 12px;\n                        border-radius:999px;\n                        background:${tierStyle.background};\n                        color:${tierStyle.text};\n                        border:1px solid ${tierStyle.border};\n                        font-size:13px;\n                        font-weight:700;\n                      \">\n                        ICP ${tier} · ${scored.icp_score ?? '—'}/100\n                      </span>\n                    </td>\n                  </tr>\n                </table>\n\n                <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"border-collapse:separate;border-spacing:0 10px;\">\n\n                  <tr>\n                    <td style=\"width:145px;color:#6B7280;font-size:14px;font-weight:600;\">Contact</td>\n                    <td style=\"color:#111827;font-size:15px;font-weight:700;\">\n                      ${booking.prospect_name || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Email</td>\n                    <td style=\"font-size:15px;\">\n                      <a href=\"mailto:${booking.email || ''}\" style=\"color:#2563EB;text-decoration:none;\">\n                        ${booking.email || 'Unknown'}\n                      </a>\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Company</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${scored.company_name || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Industry</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${scored.industry || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Employees</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${scored.employee_count || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Country</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${scored.country || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Funding</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${scored.funding_stage || 'Unknown'}\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"color:#6B7280;font-size:14px;font-weight:600;\">Meeting</td>\n                    <td style=\"color:#111827;font-size:15px;\">\n                      ${meeting}\n                    </td>\n                  </tr>\n                </table>\n              </td>\n            </tr>\n\n            <tr>\n              <td style=\"padding:12px 32px 0 32px;\">\n                <div style=\"background:#EFF6FF;border-left:4px solid #3B82F6;border-radius:10px;padding:18px 20px;\">\n                  <div style=\"font-size:13px;text-transform:uppercase;letter-spacing:0.8px;color:#1D4ED8;font-weight:700;margin-bottom:8px;\">\n                    Booking note\n                  </div>\n\n                  <div style=\"font-size:16px;line-height:1.6;color:#1F2937;\">\n                    ${note}\n                  </div>\n                </div>\n              </td>\n            </tr>\n\n            <tr>\n              <td style=\"padding:24px 32px 0 32px;\">\n                <div style=\"font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;\">\n                  Why this score\n                </div>\n\n                <div style=\"background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:16px 20px;\">\n                  <ul style=\"margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.5;\">\n                    ${reasons}\n                  </ul>\n                </div>\n              </td>\n            </tr>\n\n            <tr>\n              <td style=\"padding:24px 32px 32px 32px;\">\n                <div style=\"font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;\">\n                  Suggested discovery questions\n                </div>\n\n                <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\">\n\n                  <tr>\n                    <td style=\"width:30px;vertical-align:top;padding:0 0 12px 0;\">\n                      <div style=\"width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:#DBEAFE;color:#1D4ED8;font-size:12px;font-weight:700;\">1</div>\n                    </td>\n                    <td style=\"padding:2px 0 12px 10px;color:#374151;font-size:15px;\">\n                      What triggered the ISO 27001 project?\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"vertical-align:top;padding:0 0 12px 0;\">\n                      <div style=\"width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:#DBEAFE;color:#1D4ED8;font-size:12px;font-weight:700;\">2</div>\n                    </td>\n                    <td style=\"padding:2px 0 12px 10px;color:#374151;font-size:15px;\">\n                      Is a customer or contract currently blocked?\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"vertical-align:top;padding:0 0 12px 0;\">\n                      <div style=\"width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:#DBEAFE;color:#1D4ED8;font-size:12px;font-weight:700;\">3</div>\n                    </td>\n                    <td style=\"padding:2px 0 12px 10px;color:#374151;font-size:15px;\">\n                      What is the target certification date?\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"vertical-align:top;padding:0 0 12px 0;\">\n                      <div style=\"width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:#DBEAFE;color:#1D4ED8;font-size:12px;font-weight:700;\">4</div>\n                    </td>\n                    <td style=\"padding:2px 0 12px 10px;color:#374151;font-size:15px;\">\n                      Who will own the project internally?\n                    </td>\n                  </tr>\n\n                  <tr>\n                    <td style=\"vertical-align:top;\">\n                      <div style=\"width:24px;height:24px;line-height:24px;text-align:center;border-radius:50%;background:#DBEAFE;color:#1D4ED8;font-size:12px;font-weight:700;\">5</div>\n                    </td>\n                    <td style=\"padding:2px 0 0 10px;color:#374151;font-size:15px;\">\n                      What security work already exists?\n                    </td>\n                  </tr>\n\n                </table>\n              </td>\n            </tr>\n\n            <tr>\n              <td style=\"background:#F9FAFB;border-top:1px solid #E5E7EB;padding:18px 32px;color:#6B7280;font-size:12px;line-height:1.5;\">\n                Generated automatically from Calendly, HubSpot, and enrichment data.\n              </td>\n            </tr>\n\n          </table>\n        </td>\n      </tr>\n    </table>\n  </body>\n</html>\n  `;\n})()\n}}",
-        "options": {
-          "appendAttribution": false
         },
-        "subject": "={{\n  '[' +\n  ($('Compute ICP Score').first().json.icp_tier || 'Unscored') +\n  '] New discovery booking — ' +\n  (\n    $('Compute ICP Score').first().json.company_name\n    || $('Parse Booking From Calendly').first().json.prospect_name\n    || 'Unknown prospect'\n  )\n}}"
+        "options": {}
       },
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "{{GMAIL_CREDENTIAL_ID}}",
-          "name": "{{GMAIL_CREDENTIAL_NAME}}"
-        }
-      },
-      "typeVersion": 2.2
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5824,
+        -512
+      ],
+      "id": "2e122755-e2a4-49bd-925a-78aebdfa131b",
+      "name": "Build Meeting Briefing"
     },
     {
-      "id": "6ac9a11c-ad4e-4f13-a58c-108050211291",
-      "name": "Llama-3.1 OpenAI Model",
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "parameters": {
+        "content": "## Proposed Workflow Design\n\nThis workflow automates Calendly booking intake into HubSpot and prepares the meeting owner with useful context before the call.\n\nThe workflow first parses and validates the Calendly booking email. Valid bookings create or update the HubSpot contact and optionally add booking notes to the CRM.\n\nBusiness-email leads continue into company enrichment. The workflow checks a Google Sheets cache first to avoid duplicate research. If no cache exists, an AI Agent uses web search and structured output parsing to collect company information, then saves the result back to the cache.\n\nPersonal or private email bookings skip company enrichment. These bookings are logged in Google Sheets and trigger a lightweight notification so they can be reviewed manually if needed.\n\nSuccessful enrichment is used to calculate an ICP score, which is saved back to HubSpot. The workflow then sends a meeting briefing by Gmail. Invalid bookings or failed enrichment cases are routed to manual review without breaking the rest of the workflow.",
+        "width": 688,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
       "position": [
-        2128,
-        -360
+        -576,
+        -1872
       ],
+      "typeVersion": 1,
+      "id": "a477a38c-fbce-4ad8-a3ea-6397a10af729",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "## Valid Prospect Booking?\n\nChecks whether the parsed booking has the required fields to continue.\n\nValid bookings continue to HubSpot contact creation. Invalid, incomplete, or unusual bookings are routed to manual review.",
+        "height": 304,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -192,
+        -464
+      ],
+      "typeVersion": 1,
+      "id": "065e8707-5fe9-4862-b9c9-848ae7ac3704",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Manual Review\n\nReceives bookings that cannot be processed safely.\n\nThis branch ends here unless a manual-review alert is added. These records should be reviewed before creating or updating CRM data.",
+        "height": 400,
+        "width": 464,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        112,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "fe8bfc41-88d8-4c7b-8a52-e246d5854ec8",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## Workflow Documentation\n\n1. The workflow starts when Gmail receives a Calendly booking notification.\n\n2. The booking email is parsed to extract structured details, including prospect name, email address, lifecycle stage, lead source, booking event ID, meeting start time, company domain, and booking notes.\n\n3. The workflow checks whether the booking is a valid prospect booking.\n\n4. If the booking is invalid, incomplete, or unusual, it is routed to manual review and does not continue into the automated CRM and enrichment path.\n\n5. If the booking is valid, the workflow creates or updates the HubSpot contact using the prospect email address.\n\n6. The workflow prepares booking-note data for HubSpot.\n\n7. If booking notes are present, the workflow creates a HubSpot note associated with the contact. If no notes are present, this step is skipped.\n\n8. The workflow checks whether the prospect used a business email address.\n\n9. If the prospect used a personal or private email address, company enrichment is skipped. The booking is logged in Google Sheets and a notification email is sent for manual awareness.\n\n10. If the prospect used a business email address, the workflow processes the booking through the enrichment path one company at a time to reduce rate-limit risk.\n\n11. The workflow checks the Google Sheets enrichment cache using the company domain.\n\n12. If cached enrichment exists, the workflow reuses the cached company profile.\n\n13. If no cached enrichment exists, the workflow waits briefly, then uses an AI Agent with a chat model, SerpAPI web search, and a structured output parser to research the company.\n\n14. The AI enrichment result is normalized into the workflow’s standard company-enrichment format.\n\n15. Newly researched enrichment data is saved back to the Google Sheets cache so future bookings from the same company can reuse it.\n\n16. The workflow checks whether enrichment was successful.\n\n17. If enrichment fails or no reliable company data is found, the booking is routed to manual review and the workflow continues processing the next company.\n\n18. If enrichment succeeds, the workflow calculates the prospect’s ICP score using company signals such as industry, employee count, geography, enterprise sales motion, funding stage, technologies, and confidence.\n\n19. The calculated ICP score is saved back to the HubSpot contact.\n\n20. The workflow builds a meeting briefing using the contact, booking details, enrichment results, source URLs, and ICP score.\n\n21. The meeting briefing is sent by Gmail so the meeting owner has useful context before speaking with the prospect.\n\n22. After each business-email booking is processed, the loop moves to the next booking until all items are complete.",
+        "height": 848,
+        "width": 688,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -576,
+        -1664
+      ],
+      "typeVersion": 1,
+      "id": "9a940af4-b702-4037-beb4-5a1c735939aa",
+      "name": "Sticky Note7"
+    },
+    {
       "parameters": {
         "model": {
           "__rl": true,
-          "mode": "list",
           "value": "llama-3.1-8b-instant",
+          "mode": "list",
           "cachedResultName": "llama-3.1-8b-instant"
         },
+        "builtInTools": {},
         "options": {
-          "timeout": 60000,
           "maxTokens": 1500,
-          "maxRetries": 2,
-          "temperature": 0.1
-        },
-        "builtInTools": {}
+          "temperature": 0.1,
+          "timeout": 60000,
+          "maxRetries": 2
+        }
       },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        3072,
+        -112
+      ],
+      "id": "6ac9a11c-ad4e-4f13-a58c-108050211291",
+      "name": "OpenAI Chat Model",
       "credentials": {
         "openAiApi": {
           "id": "{{OPENAI_CREDENTIAL_ID}}",
           "name": "{{OPENAI_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 1.3
+      }
     },
     {
-      "id": "c0d9d591-f2e3-4102-8d3d-6ed9b7114488",
-      "name": "Lead Research Agent",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "position": [
-        2184,
-        -584
-      ],
       "parameters": {
-        "text": "=You are a B2B company enrichment assistant.\n\nResearch the company connected to this domain:\n{{ $('Parse Booking From Calendly').item.json.company_domain }}\n\nProspect email:\n{{ $('Parse Booking From Calendly').item.json.email }}\nUse the available web search tool when needed to identify the company and extract reliable public information.\n\nRules:\n- Do not guess.\n- Use only credible public sources.\n- If a field is unknown, return null.\n- If the company cannot be confidently identified, set enrichment_status to \"not_found\".\n- Return only the required structured JSON format.\n- Include source URLs used for the enrichment.\n- For technologies and source_urls, always return an array. If unknown or unavailable, return [].\n- Never return null for technologies or source_urls.\nYour final response must contain exactly one top-level field called output. Put all enrichment fields inside output. Do not return enrichment fields at the top level.",
+        "promptType": "define",
+        "text": "=You are a B2B company enrichment assistant.\n\nResearch the company connected to this domain:\n{{ $('Parse Calendly Booking').item.json.company_domain }}\n\nProspect email:\n{{ $('Parse Calendly Booking').item.json.email }}\nUse the available web search tool when needed to identify the company and extract reliable public information.\n\nRules:\n- Do not guess.\n- Use only credible public sources.\n- If a field is unknown, return null.\n- If the company cannot be confidently identified, set enrichment_status to \"not_found\".\n- Return only the required structured JSON format.\n- Include source URLs used for the enrichment.\n- For technologies and source_urls, always return an array. If unknown or unavailable, return [].\n- Never return null for technologies or source_urls.\nYour final response must contain exactly one top-level field called output. Put all enrichment fields inside output. Do not return enrichment fields at the top level.",
+        "hasOutputParser": true,
         "options": {
           "maxIterations": 4,
           "returnIntermediateSteps": true
-        },
-        "promptType": "define",
-        "hasOutputParser": true
+        }
       },
-      "typeVersion": 3.1
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3168,
+        -320
+      ],
+      "id": "c0d9d591-f2e3-4102-8d3d-6ed9b7114488",
+      "name": "Research Leads"
     },
     {
-      "id": "35b8b9a0-7c17-40b1-b423-810134b277a8",
-      "name": "Process AI Enrichment Data",
-      "type": "n8n-nodes-base.code",
-      "position": [
-        2592,
-        -584
-      ],
       "parameters": {
-        "jsCode": "const raw = $json.output ?? $json;\n\nconst enriched = typeof raw === 'string'\n  ? JSON.parse(raw)\n  : raw;\n\nconst booking = $('Parse Booking From Calendly').item.json;\nconst contactRaw = $('Post to HubSpot Contacts API').item.json;\n\nconst contactId =\n  contactRaw.id ||\n  contactRaw.results?.[0]?.id ||\n  contactRaw.body?.id ||\n  contactRaw.body?.results?.[0]?.id ||\n  null;\n\nreturn [\n  {\n    json: {\n      ...booking,\n\n      contact_id: contactId,\n      company_domain: booking.company_domain,\n\n      enrichment_status: enriched.enrichment_status || 'not_found',\n      enrichment_source: 'ai_web_research',\n      enrichment_error: enriched.enrichment_status === 'error' ? 'AI enrichment failed' : '',\n      enriched_at: new Date().toISOString(),\n\n      enriched_company_name: enriched.enriched_company_name || booking.company_name || null,\n      website: enriched.website || null,\n      industry: enriched.industry || null,\n      employee_count: enriched.employee_count ?? null,\n      employee_range: enriched.employee_range || null,\n      country: enriched.country || null,\n      city: enriched.city || null,\n      business_model: enriched.business_model || null,\n      sells_to_enterprise: enriched.sells_to_enterprise ?? null,\n      funding_stage: enriched.funding_stage || null,\n      company_linkedin_url: enriched.company_linkedin_url || null,\n      technologies: Array.isArray(enriched.technologies) ? enriched.technologies : [],\n      source_urls: Array.isArray(enriched.source_urls) ? enriched.source_urls : [],\n      confidence: enriched.confidence || 'low'\n    }\n  }\n];"
+        "jsCode": "const raw = $json.output ?? $json;\n\nconst enriched = typeof raw === 'string'\n  ? JSON.parse(raw)\n  : raw;\n\nconst booking = $('Parse Calendly Booking').item.json;\nconst contactRaw = $('Upsert HubSpot Contact').item.json;\n\nconst contactId =\n  contactRaw.id ||\n  contactRaw.results?.[0]?.id ||\n  contactRaw.body?.id ||\n  contactRaw.body?.results?.[0]?.id ||\n  null;\n\nreturn [\n  {\n    json: {\n      ...booking,\n\n      contact_id: contactId,\n      company_domain: booking.company_domain,\n\n      enrichment_status: enriched.enrichment_status || 'not_found',\n      enrichment_source: 'ai_web_research',\n      enrichment_error: enriched.enrichment_status === 'error' ? 'AI enrichment failed' : '',\n      enriched_at: new Date().toISOString(),\n\n      enriched_company_name: enriched.enriched_company_name || booking.company_name || null,\n      website: enriched.website || null,\n      industry: enriched.industry || null,\n      employee_count: enriched.employee_count ?? null,\n      employee_range: enriched.employee_range || null,\n      country: enriched.country || null,\n      city: enriched.city || null,\n      business_model: enriched.business_model || null,\n      sells_to_enterprise: enriched.sells_to_enterprise ?? null,\n      funding_stage: enriched.funding_stage || null,\n      company_linkedin_url: enriched.company_linkedin_url || null,\n      technologies: Array.isArray(enriched.technologies) ? enriched.technologies : [],\n      source_urls: Array.isArray(enriched.source_urls) ? enriched.source_urls : [],\n      confidence: enriched.confidence || 'low'\n    }\n  }\n];"
       },
-      "typeVersion": 2
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3792,
+        -320
+      ],
+      "id": "35b8b9a0-7c17-40b1-b423-810134b277a8",
+      "name": "Normalize AI Enrichment"
     },
     {
-      "id": "ab89b4a5-27e7-423d-a597-3d54ceb6d6e3",
-      "name": "Parse Enrichment Output",
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "position": [
-        2384,
-        -360
-      ],
       "parameters": {
         "schemaType": "manual",
         "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"enrichment_status\": {\n      \"type\": \"string\",\n      \"enum\": [\"enriched\", \"not_found\", \"error\"]\n    },\n    \"enriched_company_name\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"website\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"industry\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"employee_count\": {\n      \"type\": [\"number\", \"null\"]\n    },\n    \"employee_range\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"country\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"city\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"business_model\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"sells_to_enterprise\": {\n      \"type\": [\"boolean\", \"null\"]\n    },\n    \"funding_stage\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"company_linkedin_url\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"technologies\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"source_urls\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      }\n    },\n    \"confidence\": {\n      \"type\": \"string\",\n      \"enum\": [\"high\", \"medium\", \"low\"]\n    },\n    \"enrichment_error\": {\n      \"type\": [\"string\", \"null\"]\n    }\n  },\n  \"required\": [\n    \"enrichment_status\",\n    \"enriched_company_name\",\n    \"website\",\n    \"industry\",\n    \"employee_count\",\n    \"employee_range\",\n    \"country\",\n    \"city\",\n    \"business_model\",\n    \"sells_to_enterprise\",\n    \"funding_stage\",\n    \"company_linkedin_url\",\n    \"technologies\",\n    \"source_urls\",\n    \"confidence\",\n    \"enrichment_error\"\n  ],\n  \"additionalProperties\": false\n}"
       },
-      "typeVersion": 1.3
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3408,
+        -112
+      ],
+      "id": "ab89b4a5-27e7-423d-a597-3d54ceb6d6e3",
+      "name": "Company Enrichment Output Parser"
     },
     {
-      "id": "cc7a499c-35c1-43c4-866e-b678de13edeb",
-      "name": "Initiate Company Search",
-      "type": "@n8n/n8n-nodes-langchain.toolSerpApi",
-      "position": [
-        2256,
-        -360
-      ],
       "parameters": {
         "options": {}
       },
+      "type": "@n8n/n8n-nodes-langchain.toolSerpApi",
+      "typeVersion": 1,
+      "position": [
+        3248,
+        -112
+      ],
+      "id": "cc7a499c-35c1-43c4-866e-b678de13edeb",
+      "name": "Search Company Research",
       "credentials": {
         "serpApi": {
           "id": "{{SERPAPI_CREDENTIAL_ID}}",
           "name": "{{SERPAPI_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 1
+      }
     },
     {
-      "id": "8d819a9f-ed13-4b3c-8533-27ea03e46b83",
-      "name": "Batch Process Companies",
-      "type": "n8n-nodes-base.splitInBatches",
-      "position": [
-        1280,
-        -592
-      ],
       "parameters": {
         "options": {}
       },
-      "typeVersion": 3
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1808,
+        -416
+      ],
+      "id": "8d819a9f-ed13-4b3c-8533-27ea03e46b83",
+      "name": "Process One Company At A Time"
     },
     {
-      "id": "9fd51d74-2339-4d13-ab5b-3281dd01501b",
-      "name": "Check Cache Availability",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        1680,
-        -708
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
-            "version": 3,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "49d8d280-bc5f-440f-85dc-93971838c36e",
+              "leftValue": "={{ Boolean($json.company_domain && $json.enrichment_status) }}",
+              "rightValue": "",
               "operator": {
                 "type": "boolean",
                 "operation": "true",
                 "singleValue": true
-              },
-              "leftValue": "={{ Boolean($json.company_domain && $json.enrichment_status) }}",
-              "rightValue": ""
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "typeVersion": 2.3
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2432,
+        -736
+      ],
+      "id": "9fd51d74-2339-4d13-ab5b-3281dd01501b",
+      "name": "Cache Found?"
     },
     {
-      "id": "efa674f4-f91d-4b5a-b965-65f662221e45",
-      "name": "Wait 1 Second for Research",
-      "type": "n8n-nodes-base.wait",
-      "position": [
-        1904,
-        -584
-      ],
-      "webhookId": "{{WAIT_1_SECOND_FOR_RESEARCH_WEBHOOK_ID}}",
       "parameters": {
         "amount": 1
       },
-      "typeVersion": 1.1
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2720,
+        -304
+      ],
+      "id": "efa674f4-f91d-4b5a-b965-65f662221e45",
+      "name": "Wait Before Company Research",
+      "webhookId": "{{WAIT_BEFORE_COMPANY_RESEARCH_WEBHOOK_ID}}"
     },
     {
-      "id": "c9e0833f-fe5f-44f0-9853-8af17e4eba49",
-      "name": "Read Enrichment Cache From Sheets",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        1456,
-        -708
-      ],
       "parameters": {
-        "options": {},
-        "filtersUI": {
-          "values": [
-            {
-              "lookupValue": "={{ $('Parse Booking From Calendly').item.json.company_domain }}",
-              "lookupColumn": "company_domain"
-            }
-          ]
+        "documentId": {
+          "__rl": true,
+          "value": "{{LOOKUP_ENRICHMENT_CACHE_DOCUMENT_ID}}",
+          "mode": "list",
+          "cachedResultName": "{{LOOKUP_ENRICHMENT_CACHE_DOCUMENT_NAME}}",
+          "cachedResultUrl": "{{LOOKUP_ENRICHMENT_CACHE_DOCUMENT_URL}}"
         },
         "sheetName": {
           "__rl": true,
+          "value": "{{LOOKUP_ENRICHMENT_CACHE_SHEET_ID}}",
           "mode": "list",
-          "value": "gid=0",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_kvG-jIv-FgtLZJ708zLtaOC0Y_GcMsdROAbC9kn-D4/edit#gid=0",
-          "cachedResultName": "Sheet1"
+          "cachedResultName": "{{LOOKUP_ENRICHMENT_CACHE_SHEET_NAME}}",
+          "cachedResultUrl": "{{LOOKUP_ENRICHMENT_CACHE_SHEET_URL}}"
         },
-        "documentId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "{{READ_ENRICHMENT_CACHE_FROM_SHEETS_DOCUMENTID}}",
-          "cachedResultUrl": "{{READ_ENRICHMENT_CACHE_FROM_SHEETS_DOCUMENTID_URL}}",
-          "cachedResultName": "{{READ_ENRICHMENT_CACHE_FROM_SHEETS_DOCUMENTID_NAME}}"
-        }
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "company_domain",
+              "lookupValue": "={{ $('Parse Calendly Booking').item.json.company_domain }}"
+            }
+          ]
+        },
+        "options": {}
       },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2144,
+        -736
+      ],
+      "id": "c9e0833f-fe5f-44f0-9853-8af17e4eba49",
+      "name": "Lookup Enrichment Cache",
+      "alwaysOutputData": true,
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "{{GOOGLE_SHEETS_CREDENTIAL_ID}}",
           "name": "{{GOOGLE_SHEETS_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 4.7,
-      "alwaysOutputData": true
+      }
     },
     {
-      "id": "84b62033-2c02-49e0-bb1d-906d747db814",
-      "name": "Apply Cached Enrichment",
+      "parameters": {
+        "jsCode": "const cache = $json;\nconst booking = $('Process One Company At A Time').item.json;\n\nfunction parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n  if (!value || value === '') return [];\n\n  try {\n    const parsed = JSON.parse(value);\n    return Array.isArray(parsed) ? parsed : [];\n  } catch (error) {\n    return [];\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...booking,\n\n      contact_id: booking.contact_id ?? $('Upsert HubSpot Contact').item.json.id,\n      company_domain: booking.company_domain,\n\n      enrichment_status: cache.enrichment_status,\n      enrichment_source: 'cache',\n      enrichment_error: cache.enrichment_error || '',\n      enriched_at: cache.last_enriched_at,\n\n      enriched_company_name: cache.enriched_company_name || null,\n      website: cache.website || null,\n      industry: cache.industry || null,\n      employee_count: cache.employee_count ? Number(cache.employee_count) : null,\n      employee_range: cache.employee_range || null,\n      country: cache.country || null,\n      city: cache.city || null,\n      business_model: cache.business_model || null,\n      sells_to_enterprise:\n        cache.sells_to_enterprise === true ||\n        cache.sells_to_enterprise === 'true',\n      funding_stage: cache.funding_stage || null,\n      company_linkedin_url: cache.company_linkedin_url || null,\n      technologies: parseJsonArray(cache.technologies),\n      source_urls: parseJsonArray(cache.source_urls),\n      confidence: cache.confidence || 'low'\n    }\n  }\n];"
+      },
       "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        2880,
-        -736
+        2704,
+        -752
       ],
-      "parameters": {
-        "jsCode": "const cache = $json;\nconst booking = $('Batch Process Companies').item.json;\n\nfunction parseJsonArray(value) {\n  if (Array.isArray(value)) return value;\n  if (!value || value === '') return [];\n\n  try {\n    const parsed = JSON.parse(value);\n    return Array.isArray(parsed) ? parsed : [];\n  } catch (error) {\n    return [];\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...booking,\n\n      contact_id: booking.contact_id ?? $('Post to HubSpot Contacts API').item.json.id,\n      company_domain: booking.company_domain,\n\n      enrichment_status: cache.enrichment_status,\n      enrichment_source: 'cache',\n      enrichment_error: cache.enrichment_error || '',\n      enriched_at: cache.last_enriched_at,\n\n      enriched_company_name: cache.enriched_company_name || null,\n      website: cache.website || null,\n      industry: cache.industry || null,\n      employee_count: cache.employee_count ? Number(cache.employee_count) : null,\n      employee_range: cache.employee_range || null,\n      country: cache.country || null,\n      city: cache.city || null,\n      business_model: cache.business_model || null,\n      sells_to_enterprise:\n        cache.sells_to_enterprise === true ||\n        cache.sells_to_enterprise === 'true',\n      funding_stage: cache.funding_stage || null,\n      company_linkedin_url: cache.company_linkedin_url || null,\n      technologies: parseJsonArray(cache.technologies),\n      source_urls: parseJsonArray(cache.source_urls),\n      confidence: cache.confidence || 'low'\n    }\n  }\n];"
-      },
-      "typeVersion": 2
+      "id": "84b62033-2c02-49e0-bb1d-906d747db814",
+      "name": "Use Cached Enrichment"
     },
     {
-      "id": "048313d3-4240-4eef-9051-23469897e1a4",
-      "name": "Prepare Manual Review Data",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        3488,
-        -384
-      ],
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1935a12c-8fbf-4bd7-9e08-77a9f0e64e11",
+              "name": "review_required",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "96135803-8ca9-411c-a3bf-845116adb23f",
+              "name": "review_reason",
+              "value": "enrichment_failed_or_not_found",
+              "type": "string"
+            },
+            {
+              "id": "a4fceeff-6d66-464f-9341-c3319902e5ee",
+              "name": "company_domain",
+              "value": "={{ $json.company_domain }}",
+              "type": "string"
+            },
+            {
+              "id": "c2280329-d3a9-4efa-a372-d4b7f4bf4b81",
+              "name": "prospect_email",
+              "value": "={{ $json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "d193d878-b506-48e2-9e67-192e128645d1",
+              "name": "contact_id",
+              "value": "={{ $json.contact_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f6c2ebae-d1eb-48bf-8338-a63af610e3b9",
+              "name": "enrichment_status",
+              "value": "={{ $json.enrichment_status }}",
+              "type": "string"
+            },
+            {
+              "id": "fc4d2c12-e01c-49ea-8415-c0043d39455a",
+              "name": "enrichment_error",
+              "value": "={{ $json.enrichment_error }}",
+              "type": "string"
+            },
+            {
+              "id": "8fa44dd4-83d5-4324-ae1a-87a6ccf4fd0a",
+              "name": "review_created_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            },
+            {
+              "id": "7e509ca6-0976-4d25-b945-c77f056faa5a",
+              "name": "icp_score",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "0263ce4b-43a0-46b4-b963-a9f14599eb82",
+              "name": "icp_score_label",
+              "value": "Pending review",
+              "type": "string"
+            },
+            {
+              "id": "7246ccd3-8787-40f0-9418-ada607d0050e",
+              "name": "icp_score_reasons",
+              "value": "Company enrichment failed or returned no reliable match",
+              "type": "string"
+            }
+          ]
+        },
         "options": {}
       },
-      "typeVersion": 3.4
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5280,
+        -1072
+      ],
+      "id": "048313d3-4240-4eef-9051-23469897e1a4",
+      "name": "Manual Review: Enrichment Failed"
     },
     {
-      "id": "5682aaee-c329-4ced-9dd1-a4bfc81122df",
-      "name": "Restore Cache for Enrichment",
-      "type": "n8n-nodes-base.code",
-      "position": [
-        3040,
-        -584
-      ],
       "parameters": {
-        "jsCode": "return [\n  {\n    json: $('Process AI Enrichment Data').item.json\n  }\n];"
+        "jsCode": "return [\n  {\n    json: $('Normalize AI Enrichment').item.json\n  }\n];"
       },
-      "typeVersion": 2
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4448,
+        -320
+      ],
+      "id": "5682aaee-c329-4ced-9dd1-a4bfc81122df",
+      "name": "Restore Enrichment After Cache Save"
     },
     {
-      "id": "7367ce30-1a21-4f6d-9551-93f727182a46",
-      "name": "Append Enrichment Cache to Sheets",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        2816,
-        -584
-      ],
       "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "{{SAVE_ENRICHMENT_CACHE_DOCUMENT_ID}}",
+          "mode": "list",
+          "cachedResultName": "{{SAVE_ENRICHMENT_CACHE_DOCUMENT_NAME}}",
+          "cachedResultUrl": "{{SAVE_ENRICHMENT_CACHE_DOCUMENT_URL}}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "{{SAVE_ENRICHMENT_CACHE_SHEET_ID}}",
+          "mode": "list",
+          "cachedResultName": "{{SAVE_ENRICHMENT_CACHE_SHEET_NAME}}",
+          "cachedResultUrl": "{{SAVE_ENRICHMENT_CACHE_SHEET_URL}}"
+        },
         "columns": {
+          "mappingMode": "defineBelow",
           "value": {
-            "city": "={{ $json.city }}",
-            "country": "={{ $json.country }}",
-            "website": "={{ $json.website }}",
+            "enriched_company_name": "={{ $json.company_name }}",
             "industry": "={{ $json.industry }}",
-            "confidence": "={{ $json.confidence }}",
-            "source_urls": "={{ ($json.source_urls || []).join(', ') }}",
-            "technologies": "={{ ($json.technologies || []).join(', ') }}",
-            "funding_stage": "={{ $json.funding_stage }}",
-            "business_model": "={{ $json.business_model }}",
-            "company_domain": "={{ $json.company_domain }}",
+            "website": "={{ $json.website }}",
             "employee_count": "={{ $json.employee_count }}",
             "employee_range": "={{ $json.employee_range }}",
-            "enrichment_error": "={{ $json.enrichment_error }}",
-            "last_enriched_at": "={{ $json.enriched_at }}",
-            "enrichment_source": "={{ $json.enrichment_source }}",
-            "enrichment_status": "={{ $json.enrichment_status }}",
+            "country": "={{ $json.country }}",
+            "city": "={{ $json.city }}",
+            "business_model": "={{ $json.business_model }}",
             "sells_to_enterprise": "={{ $json.sells_to_enterprise }}",
+            "funding_stage": "={{ $json.funding_stage }}",
             "company_linkedin_url": "={{ $json.company_linkedin_url }}",
-            "enriched_company_name": "={{ $json.company_name }}"
+            "technologies": "={{ ($json.technologies || []).join(', ') }}",
+            "source_urls": "={{ ($json.source_urls || []).join(', ') }}",
+            "confidence": "={{ $json.confidence }}",
+            "enrichment_status": "={{ $json.enrichment_status }}",
+            "company_domain": "={{ $json.company_domain }}",
+            "enrichment_error": "={{ $json.enrichment_error }}",
+            "enrichment_source": "={{ $json.enrichment_source }}",
+            "last_enriched_at": "={{ $json.enriched_at }}"
           },
+          "matchingColumns": [],
           "schema": [
             {
               "id": "company_domain",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "company_domain",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "enrichment_status",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "enrichment_status",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "enriched_company_name",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "enriched_company_name",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "website",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "website",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "industry",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "industry",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "employee_count",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "employee_count",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "employee_range",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "employee_range",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "country",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "country",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "city",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "city",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "business_model",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "business_model",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "sells_to_enterprise",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "sells_to_enterprise",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "funding_stage",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "funding_stage",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "company_linkedin_url",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "company_linkedin_url",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "technologies",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "technologies",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "source_urls",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "source_urls",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "confidence",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "confidence",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "enrichment_source",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "enrichment_source",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "enrichment_error",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "enrichment_error",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             },
             {
               "id": "last_enriched_at",
-              "type": "string",
-              "display": true,
-              "required": false,
               "displayName": "last_enriched_at",
+              "required": false,
               "defaultMatch": false,
+              "display": true,
+              "type": "string",
               "canBeUsedToMatch": true
             }
           ],
-          "mappingMode": "defineBelow",
-          "matchingColumns": [],
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
         },
-        "options": {},
-        "operation": "append",
-        "sheetName": {
-          "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_kvG-jIv-FgtLZJ708zLtaOC0Y_GcMsdROAbC9kn-D4/edit#gid=0",
-          "cachedResultName": "Sheet1"
-        },
-        "documentId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "{{APPEND_ENRICHMENT_CACHE_TO_SHEETS_DOCUMENTID}}",
-          "cachedResultUrl": "{{APPEND_ENRICHMENT_CACHE_TO_SHEETS_DOCUMENTID_URL}}",
-          "cachedResultName": "{{APPEND_ENRICHMENT_CACHE_TO_SHEETS_DOCUMENTID_NAME}}"
-        }
+        "options": {}
       },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        4096,
+        -320
+      ],
+      "id": "7367ce30-1a21-4f6d-9551-93f727182a46",
+      "name": "Save Enrichment Cache",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "{{GOOGLE_SHEETS_CREDENTIAL_ID}}",
           "name": "{{GOOGLE_SHEETS_CREDENTIAL_NAME}}"
         }
-      },
-      "typeVersion": 4.7
+      }
     },
     {
       "parameters": {
-        "content": "## Workflow Overview\n\nThis workflow automates Calendly booking intake into HubSpot. It parses a Calendly booking email, validates the prospect record, upserts the HubSpot contact, records booking notes, enriches business-email leads, calculates ICP fit, and sends a meeting briefing.\n\nThe workflow uses placeholders for credentials, workflow IDs, recipient emails, cache sheet IDs, and sample execution data so it can be shared safely. Reconnect credentials and replace placeholders after importing into a private n8n environment.",
-        "width": 720,
-        "height": 432
+        "sendTo": "{{MEETING_BRIEFING_RECIPIENT_EMAIL}}",
+        "subject": "={{\n  '[' +\n  ($('Calculate ICP Score').item.json.icp_tier || 'Unscored') +\n  '] New discovery booking — ' +\n  (\n    $('Calculate ICP Score').item.json.company_name ||\n    $('Calculate ICP Score').item.json.enriched_company_name ||\n    $('Parse Calendly Booking').item.json.prospect_name ||\n    'Unknown prospect'\n  )\n}}",
+        "message": "={{\n(() => {\n  const booking = $('Parse Calendly Booking').item.json;\n  const scored = $('Calculate ICP Score').item.json;\n  const hubspotNote = $('HubSpot note').item.json;\n\n  const note =\n    booking.booking_notes ||\n    hubspotNote.booking_notes ||\n    'No preparation note provided';\n\n  const meeting = booking.meeting_start\n    ? DateTime.fromISO(booking.meeting_start)\n        .toFormat('dd LLL yyyy, HH:mm ZZZZ')\n    : 'Unknown';\n\n  const tier = scored.icp_tier || 'Unscored';\n\n  const styles = {\n    High: {\n      background: '#DCFCE7',\n      text: '#166534',\n      border: '#86EFAC'\n    },\n    Medium: {\n      background: '#FEF3C7',\n      text: '#92400E',\n      border: '#FCD34D'\n    },\n    Low: {\n      background: '#FEE2E2',\n      text: '#991B1B',\n      border: '#FCA5A5'\n    },\n    Unscored: {\n      background: '#E5E7EB',\n      text: '#374151',\n      border: '#D1D5DB'\n    }\n  };\n\n  const tierStyle = styles[tier] || styles.Unscored;\n\n  const reasons = String(\n    scored.icp_reasons || 'No scoring reasons available'\n  )\n    .split('\\n')\n    .map(reason => reason.trim())\n    .filter(Boolean)\n    .map(reason => `\n      <li style=\"margin:0 0 8px 0;\">\n        ${reason}\n      </li>\n    `)\n    .join('');\n\n  return `\n<table\n  role=\"presentation\"\n  width=\"100%\"\n  cellpadding=\"0\"\n  cellspacing=\"0\"\n  border=\"0\"\n  style=\"width:100%;background-color:#F3F4F6;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#111827;\"\n>\n  <tr>\n    <td align=\"center\">\n\n      <table\n        role=\"presentation\"\n        width=\"680\"\n        cellpadding=\"0\"\n        cellspacing=\"0\"\n        border=\"0\"\n        style=\"width:100%;max-width:680px;background-color:#FFFFFF;border:1px solid #E5E7EB;border-radius:16px;\"\n      >\n\n        <tr>\n          <td style=\"background-color:#0F2742;padding:28px 32px;border-radius:16px 16px 0 0;\">\n            <div style=\"font-size:13px;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:1.2px;\">\n              New inbound opportunity\n            </div>\n\n            <div style=\"font-size:28px;line-height:1.2;font-weight:700;color:#FFFFFF;margin-top:10px;\">\n              New discovery booking\n            </div>\n\n            <div style=\"font-size:15px;line-height:1.5;color:#CBD5E1;margin-top:8px;\">\n              A prospect booked time through Calendly\n            </div>\n          </td>\n        </tr>\n\n        <tr>\n          <td style=\"padding:28px 32px 14px 32px;\">\n\n            <div style=\"margin-bottom:22px;\">\n              <span style=\"\n                display:inline-block;\n                padding:8px 14px;\n                border-radius:999px;\n                background-color:${tierStyle.background};\n                color:${tierStyle.text};\n                border:1px solid ${tierStyle.border};\n                font-size:13px;\n                font-weight:700;\n              \">\n                ICP ${tier} &bull; ${scored.icp_score ?? '—'}/100\n              </span>\n            </div>\n\n            <table\n              role=\"presentation\"\n              width=\"100%\"\n              cellpadding=\"0\"\n              cellspacing=\"0\"\n              border=\"0\"\n            >\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Contact\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;font-weight:700;\">\n                  ${booking.prospect_name || 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Email\n                </td>\n                <td style=\"padding:7px 0;font-size:15px;\">\n                  <a\n                    href=\"mailto:${booking.email || ''}\"\n                    style=\"color:#2563EB;text-decoration:none;\"\n                  >\n                    ${booking.email || 'Unknown'}\n                  </a>\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Company\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${scored.company_name || scored.enriched_company_name || 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Industry\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${scored.industry || 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Employees\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${scored.employee_count ?? scored.employee_range ?? 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Country\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${scored.country || 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Funding\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${scored.funding_stage || 'Unknown'}\n                </td>\n              </tr>\n\n              <tr>\n                <td width=\"145\" style=\"padding:7px 0;color:#6B7280;font-size:14px;font-weight:600;\">\n                  Meeting\n                </td>\n                <td style=\"padding:7px 0;color:#111827;font-size:15px;\">\n                  ${meeting}\n                </td>\n              </tr>\n            </table>\n\n          </td>\n        </tr>\n\n        <tr>\n          <td style=\"padding:12px 32px 0 32px;\">\n            <table\n              role=\"presentation\"\n              width=\"100%\"\n              cellpadding=\"0\"\n              cellspacing=\"0\"\n              border=\"0\"\n              style=\"background-color:#EFF6FF;border-left:4px solid #3B82F6;border-radius:10px;\"\n            >\n              <tr>\n                <td style=\"padding:18px 20px;\">\n                  <div style=\"font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#1D4ED8;margin-bottom:8px;\">\n                    Booking note\n                  </div>\n\n                  <div style=\"font-size:16px;line-height:1.6;color:#1F2937;\">\n                    ${note}\n                  </div>\n                </td>\n              </tr>\n            </table>\n          </td>\n        </tr>\n\n        <tr>\n          <td style=\"padding:24px 32px 0 32px;\">\n            <div style=\"font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;\">\n              Why this score\n            </div>\n\n            <table\n              role=\"presentation\"\n              width=\"100%\"\n              cellpadding=\"0\"\n              cellspacing=\"0\"\n              border=\"0\"\n              style=\"background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;\"\n            >\n              <tr>\n                <td style=\"padding:16px 20px;\">\n                  <ul style=\"margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.5;\">\n                    ${reasons}\n                  </ul>\n                </td>\n              </tr>\n            </table>\n          </td>\n        </tr>\n\n        <tr>\n          <td style=\"padding:24px 32px 32px 32px;\">\n            <div style=\"font-size:18px;font-weight:700;color:#111827;margin-bottom:12px;\">\n              Meeting preparation checklist\n            </div>\n\n            <table\n              role=\"presentation\"\n              width=\"100%\"\n              cellpadding=\"0\"\n              cellspacing=\"0\"\n              border=\"0\"\n              style=\"background-color:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;\"\n            >\n              <tr>\n                <td style=\"padding:16px 20px;\">\n                  <ul style=\"margin:0;padding-left:20px;color:#374151;font-size:15px;line-height:1.8;\">\n                    <li>Review the prospect's company profile and industry.</li>\n                    <li>Confirm the prospect's goals, challenges, and expected outcomes.</li>\n                    <li>Validate key qualification details during the conversation.</li>\n                    <li>Identify decision-makers, timeline, and agreed next steps.</li>\n                    <li>Capture action items and define follow-up activities.</li>\n                  </ul>\n                </td>\n              </tr>\n            </table>\n          </td>\n        </tr>\n\n        <tr>\n          <td style=\"background-color:#F9FAFB;border-top:1px solid #E5E7EB;padding:18px 32px;border-radius:0 0 16px 16px;color:#6B7280;font-size:12px;line-height:1.5;\">\n            Generated automatically from Calendly, HubSpot, and AI enrichment.\n          </td>\n        </tr>\n\n      </table>\n    </td>\n  </tr>\n</table>\n  `;\n})()\n}}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        6144,
+        -64
+      ],
+      "id": "ce61946f-3326-4d64-9669-c104c01d5e90",
+      "name": "Send Meeting Briefing",
+      "webhookId": "{{SEND_MEETING_BRIEFING_WEBHOOK_ID}}",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "{{GMAIL_CREDENTIAL_ID}}",
+          "name": "{{GMAIL_CREDENTIAL_NAME}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      logged_at: new Date().toISOString(),\n\n      prospect_name: $json.prospect_name || 'Unknown prospect',\n      first_name: $json.first_name || '',\n      last_name: $json.last_name || '',\n      email: $json.email || '',\n      email_domain: $json.email_domain || '',\n      company_domain: $json.company_domain || '',\n\n      meeting_title: $json.meeting_title || 'Booked meeting',\n      meeting_start: $json.meeting_start || '',\n      booking_event_id: $json.booking_event_id || '',\n      booking_notes: $json.booking_notes || '',\n      booking_source: $json.booking_source || 'Calendly booking email',\n\n      hubspot_contact_id: $('Upsert HubSpot Contact').item.json.id || '',\n\n      enrichment_status: 'skipped',\n      skip_reason: 'Private or personal email domain. Company enrichment skipped.',\n      review_status: 'pending',\n      reported_in_digest: 'no'\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        144
+      ],
+      "id": "c59346ce-e4fe-4a78-aa60-44a5c03b3f60",
+      "name": "Format Private Email Booking"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "{{APPEND_PRIVATE_EMAIL_BOOKING_DOCUMENT_ID}}",
+          "mode": "list",
+          "cachedResultName": "{{APPEND_PRIVATE_EMAIL_BOOKING_DOCUMENT_NAME}}",
+          "cachedResultUrl": "{{APPEND_PRIVATE_EMAIL_BOOKING_DOCUMENT_URL}}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 135336957,
+          "mode": "list",
+          "cachedResultName": "{{APPEND_PRIVATE_EMAIL_BOOKING_SHEET_NAME}}",
+          "cachedResultUrl": "{{APPEND_PRIVATE_EMAIL_BOOKING_SHEET_URL}}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "logged_at": "={{ $json.logged_at }}",
+            "prospect_name": "={{ $json.prospect_name }}",
+            "first_name": "={{ $json.first_name }}",
+            "last_name": "={{ $json.last_name }}",
+            "email": "={{ $json.email }}",
+            "email_domain": "={{ $json.email_domain }}",
+            "company_domain": "={{ $json.company_domain }}",
+            "meeting_title": "={{ $json.meeting_title }}",
+            "meeting_start": "={{ $json.meeting_start }}",
+            "booking_event_id": "={{ $json.booking_event_id }}",
+            "booking_notes": "={{ $json.booking_notes }}",
+            "booking_source": "={{ $json.booking_source }}",
+            "hubspot_contact_id": "={{ $json.hubspot_contact_id }}",
+            "enrichment_status": "={{ $json.enrichment_status }}",
+            "skip_reason": "={{ $json.skip_reason }}",
+            "review_status": "={{ $json.review_status }}",
+            "reported_in_digest": "={{ $json.reported_in_digest }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "logged_at",
+              "displayName": "logged_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prospect_name",
+              "displayName": "prospect_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_name",
+              "displayName": "last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_domain",
+              "displayName": "email_domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_domain",
+              "displayName": "company_domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meeting_title",
+              "displayName": "meeting_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "meeting_start",
+              "displayName": "meeting_start",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_event_id",
+              "displayName": "booking_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_notes",
+              "displayName": "booking_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "booking_source",
+              "displayName": "booking_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hubspot_contact_id",
+              "displayName": "hubspot_contact_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "enrichment_status",
+              "displayName": "enrichment_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "skip_reason",
+              "displayName": "skip_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_status",
+              "displayName": "review_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reported_in_digest",
+              "displayName": "reported_in_digest",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2080,
+        144
+      ],
+      "id": "65f86a97-a9a2-40e5-b8a7-1851145c19ad",
+      "name": "Append Private Email Booking",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "{{GOOGLE_SHEETS_CREDENTIAL_NAME}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "{{MEETING_BRIEFING_RECIPIENT_EMAIL}}",
+        "subject": "=Personal email booking skipped enrichment: {{ $('Format Private Email Booking').item.json.prospect_name }}",
+        "message": "=<h2>Personal Email Booking Logged</h2>\n\n<p>\nA new booking used a private or personal email address. Company enrichment and ICP scoring were skipped, and the booking was added to the private email bookings sheet.\n</p>\n\n<h3>Prospect</h3>\n<p>\n<strong>Name:</strong> {{ $('Format Private Email Booking').item.json.prospect_name }}<br>\n<strong>Email:</strong> {{ $('Format Private Email Booking').item.json.email }}<br>\n<strong>Email domain:</strong> {{ $('Format Private Email Booking').item.json.email_domain }}\n</p>\n\n<h3>Meeting</h3>\n<p>\n<strong>Title:</strong> {{ $('Format Private Email Booking').item.json.meeting_title }}<br>\n<strong>Start:</strong> {{ $('Format Private Email Booking').item.json.meeting_start }}<br>\n<strong>Booking event ID:</strong> {{ $('Format Private Email Booking').item.json.booking_event_id }}\n</p>\n\n<h3>Notes</h3>\n<p>{{ $('Format Private Email Booking').item.json.booking_notes || 'No booking notes provided.' }}</p>\n\n<h3>Status</h3>\n<p>\n<strong>Enrichment:</strong> Skipped<br>\n<strong>Reason:</strong> Private or personal email domain. Company enrichment skipped.<br>\n<strong>Sheet status:</strong> Added to private_email_bookings\n</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2304,
+        144
+      ],
+      "id": "6f1b4c1a-4c9b-463a-876b-456b5785fbc7",
+      "name": "Send Private Email Alert",
+      "webhookId": "{{SEND_PRIVATE_EMAIL_ALERT_WEBHOOK_ID}}",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "{{GMAIL_CREDENTIAL_ID}}",
+          "name": "{{GMAIL_CREDENTIAL_NAME}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "{{MEETING_BRIEFING_RECIPIENT_EMAIL}}",
+        "subject": "=Manual review needed: Calendly booking could not be processed",
+        "message": "=<h2>Manual Review Needed</h2>\n\n<p>A Calendly booking could not be processed automatically.</p>\n\n<p>\n<strong>Prospect:</strong> {{ $json.prospect_name || 'Unknown' }}<br>\n<strong>Email:</strong> {{ $json.email || 'Missing' }}<br>\n<strong>Meeting start:</strong> {{ $json.meeting_start || 'Missing' }}<br>\n<strong>Booking event ID:</strong> {{ $json.booking_event_id || 'Missing' }}<br>\n<strong>Missing fields:</strong> {{ JSON.stringify($json.missing_fields || []) }}<br>\n<strong>Parse status:</strong> {{ $json.meeting_parse_status || 'Unknown' }}<br>\n<strong>Parse error:</strong> {{ $json.meeting_parse_error || 'None' }}\n</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        352,
+        32
+      ],
+      "id": "7726a4fa-95ff-44c4-a6f0-d7dd1a25e958",
+      "name": "Send Manual Review Alert",
+      "webhookId": "{{SEND_MANUAL_REVIEW_ALERT_WEBHOOK_ID}}",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "{{GMAIL_CREDENTIAL_ID}}",
+          "name": "{{GMAIL_CREDENTIAL_NAME}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Parse Calendly Booking\n\nExtracts structured booking data from the Calendly email.\n\nOutputs prospect name, email, email domain, company domain, meeting title, meeting start time, booking event ID, booking notes, source, and validation fields.",
+        "height": 336,
+        "width": 304
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        -608,
-        -1184
+        -512,
+        -480
       ],
-      "id": "sticky-note-01",
-      "name": "Docs - Workflow Overview"
+      "typeVersion": 1,
+      "id": "d5381e3d-f7af-4004-857f-0fd719de16eb",
+      "name": "Sticky Note8"
     },
     {
       "parameters": {
-        "content": "## Lead Intake\n\nTriggered by a Calendly notification email in Gmail.\n\nThe parser extracts booking details into structured fields such as prospect name, email, company domain, booking event ID, meeting start time, lead source, lifecycle stage, and booking notes.\n\nOnly valid prospect bookings continue into CRM creation. Invalid or incomplete bookings are routed to manual review.",
-        "width": 480,
-        "height": 392
+        "content": "## Upsert HubSpot Contact\n\nCreates or updates the HubSpot contact using the prospect email.\n\nThe resulting HubSpot contact ID is reused later for notes, ICP scoring, and meeting briefing context.",
+        "height": 304,
+        "width": 320
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        -624,
-        -784
+        288,
+        -464
       ],
-      "id": "sticky-note-02",
-      "name": "Docs - Lead Intake"
+      "typeVersion": 1,
+      "id": "0b736cb9-53f2-4f0b-ba46-631117495214",
+      "name": "Sticky Note2"
     },
     {
       "parameters": {
-        "content": "## CRM Creation\n\nThe workflow validates the booking and upserts the prospect as a HubSpot contact using the email address as the primary identity key.\n\nHubSpot handles company association from the email domain, so this workflow does not add separate company-matching logic.\n\nThe HubSpot contact ID is preserved for later ICP updates and meeting briefing generation.",
-        "width": 496,
-        "height": 392
+        "content": "## Upsert HubSpot Contact\n\nCreates or updates the HubSpot contact using the prospect email.\n\nThe resulting HubSpot contact ID is reused later for notes, ICP scoring, and meeting briefing context.",
+        "height": 400,
+        "width": 272
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        -160,
-        -784
+        624,
+        -464
       ],
-      "id": "sticky-note-03",
-      "name": "Docs - CRM Creation"
+      "typeVersion": 1,
+      "id": "ae88cad2-3359-4bdc-8620-ac7380a309d4",
+      "name": "Sticky Note9"
     },
     {
       "parameters": {
-        "content": "## Booking Note\n\nIf Calendly booking notes are present, the workflow creates a HubSpot note and associates it with the contact.\n\nThis preserves prospect intent, meeting context, requested topics, or additional comments from the booking form.\n\nEmpty booking notes are skipped to avoid noisy CRM activity.",
-        "width": 720,
-        "height": 392
+        "content": "## Booking Notes Present?\n\nChecks whether the Calendly booking includes notes.\n\nIf notes are present, the workflow creates a HubSpot note. If notes are empty, note creation is skipped.",
+        "height": 400
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        320,
-        -784
+        912,
+        -464
       ],
-      "id": "sticky-note-04",
-      "name": "Docs - Booking Note"
+      "typeVersion": 1,
+      "id": "eb5e193e-a12a-431e-93dc-04fe266bfff7",
+      "name": "Sticky Note10"
     },
     {
       "parameters": {
-        "content": "## Enrichment And Qualification\n\nBusiness email leads enter the enrichment path. Personal email domains skip enrichment to reduce unnecessary API usage and avoid low-confidence research.\n\nThe workflow processes companies one at a time to reduce rate-limit risk. It first checks the Google Sheets enrichment cache by company domain. If a cached record exists, the workflow reuses it. If no record exists, it waits briefly, then uses an AI Agent with a chat model, SerpAPI web search, and a structured output parser to collect company-level data.\n\nThe normalized AI enrichment result is saved back to the cache so future bookings from the same company can reuse the same company profile instead of triggering another web search. Array fields such as technologies and source URLs are converted to readable text before saving to Google Sheets.\n\nThe enriched company profile is evaluated for ICP fit using signals such as industry, employee count, geography, enterprise sales motion, funding stage, technology context, and confidence level.\n\nIf enrichment fails, returns no reliable company match, or cannot produce the required structured output, the workflow routes the booking to manual review instead of failing the entire intake process.\n\nThe final ICP score is saved back to the HubSpot contact.",
-        "width": 2224,
-        "height": 1024
+        "content": "## Business Email?\n\nDetermines whether the prospect used a business email address.\n\nBusiness emails continue to company enrichment. Personal or private email domains skip enrichment and are logged separately.",
+        "height": 400
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        1232,
-        -1064
+        1456,
+        -464
       ],
-      "id": "sticky-note-05",
-      "name": "Docs - Enrichment And Qualification"
+      "typeVersion": 1,
+      "id": "4ebc5eb4-03c9-44dc-ab9a-93f703d7cf28",
+      "name": "Sticky Note11"
     },
     {
       "parameters": {
-        "content": "## Meeting Briefing\n\nAfter ICP scoring, the workflow builds a meeting briefing from the CRM contact, booking details, enrichment result, source URLs, and ICP score.\n\nThe briefing is sent through Gmail so the meeting owner has useful context before speaking with the prospect.",
-        "width": 560,
-        "height": 392
+        "content": "## Create HubSpot Booking Note\n\nCreates a HubSpot note associated with the contact.\n\nThe note stores booking context such as prospect intent, requested topics, and additional Calendly form details.",
+        "height": 400
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        3888,
-        -944
+        1184,
+        -464
       ],
-      "id": "sticky-note-06",
-      "name": "Docs - Meeting Briefing"
+      "typeVersion": 1,
+      "id": "77c268b4-2479-417f-a28d-349a7a2838be",
+      "name": "Sticky Note12"
     },
     {
       "parameters": {
-        "content": "## Manual Review\n\nBookings are routed here when validation fails, required fields are missing, or enrichment cannot confidently identify the company.\n\nManual review keeps the workflow resilient: CRM intake can continue while records that need human judgment are clearly separated from the automated success path.",
-        "width": 384,
-        "height": 432,
+        "content": "## Format Private Email Booking\n\nFormats private-email bookings for logging.\n\nCompany enrichment and ICP scoring are skipped because the email domain does not reliably identify a company.",
+        "height": 384,
         "color": 2
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        96,
-        -304
+        1744,
+        -80
       ],
-      "id": "sticky-note-07",
-      "name": "Docs - Manual Review"
+      "typeVersion": 1,
+      "id": "d35eacfc-969b-40a8-b0b9-1c096a674f3a",
+      "name": "Sticky Note13"
     },
     {
       "parameters": {
-        "content": "## Setup Checklist\n\nBefore running this workflow in production, configure:\n- Gmail trigger and send credentials\n- HubSpot private app token credential\n- OpenAI credential for the AI Agent chat model\n- SerpAPI credential for company research\n- Google Sheets cache document and sheet tab\n- HubSpot contact property for ICP score\n- Review recipient or process for failed enrichment\n\nKeep cache rows keyed by company_domain to deduplicate enrichment across multiple bookings.",
-        "width": 672,
-        "height": 432
+        "content": "## Append Private Email Booking\n\nAdds the private-email booking to the Google Sheets tracking tab.\n\nThis creates a lightweight review queue for personal-email bookings without interrupting the main CRM intake workflow.",
+        "height": 384,
+        "color": 2
       },
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        480,
-        -1184
+        2000,
+        -80
       ],
-      "id": "sticky-note-08",
-      "name": "Docs - Setup Checklist"
+      "typeVersion": 1,
+      "id": "72f195c3-f4fc-499a-9576-739253e5b299",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "content": "## Send Private Email Alert\n\nNotifies the workflow owner when a private-email booking is logged.\n\nThis alert is useful because private-email bookings are rare and may need manual qualification.",
+        "height": 384,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2256,
+        -80
+      ],
+      "typeVersion": 1,
+      "id": "a68cdaad-9329-4e4e-8109-b9c57fe4b4f3",
+      "name": "Sticky Note15"
+    },
+    {
+      "parameters": {
+        "content": "## Process One Company At A Time\n\nProcesses business-email bookings sequentially.\n\nThis reduces rate-limit risk for Google Sheets, SerpAPI, OpenAI, and other enrichment-related services.",
+        "height": 384
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1744,
+        -672
+      ],
+      "typeVersion": 1,
+      "id": "ac0d22c0-39c3-4e7e-a637-1fe2142883fe",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## Lookup Enrichment Cache\n\nSearches the Google Sheets enrichment cache using the company domain.\n\nIf a matching company profile already exists, the workflow reuses cached enrichment instead of running AI web research again.",
+        "height": 416
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2080,
+        -992
+      ],
+      "typeVersion": 1,
+      "id": "0be4961d-4dc8-48d4-801e-3e79572ea1ad",
+      "name": "Sticky Note16"
+    },
+    {
+      "parameters": {
+        "content": "## Use Cached Enrichment\n\nNormalizes cached Google Sheets data back into the same structure used by AI enrichment.\n\nThis keeps downstream ICP scoring and briefing nodes consistent across cached and newly enriched leads.",
+        "height": 416
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2624,
+        -992
+      ],
+      "typeVersion": 1,
+      "id": "56e883cd-8db9-4a32-82c4-aeb0aa50b2c2",
+      "name": "Sticky Note17"
+    },
+    {
+      "parameters": {
+        "content": "## Cache Found?\n\nChecks whether the cache lookup returned usable enrichment data.\n\nCached records continue directly to ICP scoring. Missing cache records continue to the AI enrichment branch.",
+        "height": 416
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2352,
+        -992
+      ],
+      "typeVersion": 1,
+      "id": "535231d7-c23c-4885-9e59-e8863e5c3510",
+      "name": "Sticky Note18"
+    },
+    {
+      "parameters": {
+        "content": "## Wait Before Company Research\n\nAdds a short delay before AI web enrichment.\n\nThis helps reduce rate-limit pressure when multiple business-email bookings are processed close together.",
+        "height": 400,
+        "width": 320,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2608,
+        -528
+      ],
+      "typeVersion": 1,
+      "id": "0538d573-5706-42c1-b7b9-16c982a7b086",
+      "name": "Sticky Note19"
+    },
+    {
+      "parameters": {
+        "content": "## Research Leads\n\nUses an AI Agent to research the company behind the prospect’s business email domain. The agent uses a chat model, web search, and structured output parsing to return standardized enrichment fields.\n\n## OpenAI Chat Model\n\nProvides the language model used by the AI Agent. Use a low temperature for more consistent company research and structured output.\n\n## Search Company Research\n\nProvides web search access for the AI Agent. The agent uses this tool to look up public company information such as website, industry, employee range, geography, and source URLs.\n\n## Company Enrichment Output Parser\n\nForces AI enrichment into a predictable JSON structure. This protects downstream nodes from inconsistent AI responses and makes ICP scoring easier to maintain.",
+        "height": 784,
+        "width": 608
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2992,
+        -688
+      ],
+      "typeVersion": 1,
+      "id": "6d2d9d76-2429-4e34-b94c-178379eb25c9",
+      "name": "Sticky Note20"
+    },
+    {
+      "parameters": {
+        "content": "## Normalize AI Enrichment\n\nConverts the AI Agent output into the workflow’s standard enrichment format.\n\nAdds contact ID, company domain, enrichment status, source, confidence, company profile fields, technologies, and source URLs.",
+        "height": 416,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3680,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "b4fa5582-ae57-4847-9446-693f997e2f56",
+      "name": "Sticky Note21"
+    },
+    {
+      "parameters": {
+        "content": "## Save Enrichment Cache\n\nAppends newly researched company enrichment data to Google Sheets.\n\nFuture bookings from the same company domain can reuse this cached profile, reducing cost, latency, and rate-limit risk.",
+        "height": 416,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        4032,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "929ea87f-039c-45ae-97d6-70b7f00b71c8",
+      "name": "Sticky Note22"
+    },
+    {
+      "parameters": {
+        "content": "## Enrichment Found?\n\nChecks whether enrichment succeeded.\n\nSuccessful enrichment continues to ICP scoring. Failed or low-confidence enrichment routes to manual review instead of breaking the workflow.",
+        "height": 352,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        4736,
+        -1376
+      ],
+      "typeVersion": 1,
+      "id": "bdfa3958-7877-43b3-81a0-d4e4f5ae19d2",
+      "name": "Sticky Note23"
+    },
+    {
+      "parameters": {
+        "content": "## Restore Enrichment After Cache Save\n\nRestores the normalized enrichment payload after the Google Sheets append step.\n\nThis is needed because the Sheets node may output row data instead of the enrichment object expected by downstream nodes.",
+        "height": 416,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        4336,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "c5f73c81-6a65-4465-8b78-fcd4de2583a0",
+      "name": "Sticky Note24"
+    },
+    {
+      "parameters": {
+        "content": "## Manual Review: Enrichment Failed\n\nHandles business-email bookings where enrichment failed or no reliable company match was found.\n\nThis branch connects back to the loop so the next booking can continue processing.",
+        "height": 368,
+        "width": 304,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        5168,
+        -1264
+      ],
+      "typeVersion": 1,
+      "id": "84d84907-53b8-4d61-8570-c490b41e08f9",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Calculate ICP Score\n\nCalculates the lead’s ICP fit score from enrichment data.\n\nSignals can include industry, employee count, geography, enterprise sales motion, funding stage, technologies, and confidence.",
+        "height": 416,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        5168,
+        -1712
+      ],
+      "typeVersion": 1,
+      "id": "0f3b7af0-9e9c-461a-8fb8-98189294a689",
+      "name": "Sticky Note25"
+    },
+    {
+      "parameters": {
+        "content": "## Update Contact ICP\n\nWrites the calculated ICP score back to the HubSpot contact.\n\nThis keeps qualification data available directly in the CRM.",
+        "height": 416
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        5536,
+        -1600
+      ],
+      "typeVersion": 1,
+      "id": "56cfe10c-badb-4be9-8007-f93062a7c6be",
+      "name": "Sticky Note26"
+    },
+    {
+      "parameters": {
+        "content": "## Build Meeting Briefing\n\nBuilds the final briefing from booking data, HubSpot contact data, enrichment results, source URLs, and ICP score.\n\nThe briefing helps the meeting owner prepare before speaking with the prospect.",
+        "height": 384,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        5728,
+        -736
+      ],
+      "typeVersion": 1,
+      "id": "579fad76-26a9-4acd-ba72-091c75339300",
+      "name": "Sticky Note27"
+    },
+    {
+      "parameters": {
+        "content": "## Send Meeting Briefing\n\nSends the meeting briefing by Gmail.\n\nThis is the final successful output for enriched or cached business-email bookings.",
+        "height": 448,
+        "width": 352
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        6048,
+        -240
+      ],
+      "typeVersion": 1,
+      "id": "125bd13f-83ca-4641-a3f0-81ca314156b2",
+      "name": "Sticky Note28"
     }
   ],
-  "active": false,
   "pinData": {
-    "Gmail Sent Trigger": [
+    "Gmail Trigger": [
       {
         "json": {
-          "To": "{{INBOX_RECIPIENT_EMAIL}}",
-          "id": "{{GMAIL_MESSAGE_ID}}",
-          "From": "{{CALENDLY_SENDER_EMAIL}}",
-          "labels": [
-            {
-              "id": "{{GMAIL_LABEL_1_ID}}",
-              "name": "{{GMAIL_LABEL_1_NAME}}"
-            },
-            {
-              "id": "{{GMAIL_LABEL_2_ID}}",
-              "name": "{{GMAIL_LABEL_2_NAME}}"
-            }
-          ],
-          "Subject": "{{CALENDLY_BOOKING_EMAIL_SUBJECT}}",
+          "id": "{{PINNED_ID}}",
+          "threadId": "{{GMAIL_THREAD_ID}}",
+          "snippet": "{{EMAIL_SNIPPET}}",
           "payload": {
             "mimeType": "text/html"
           },
-          "snippet": "{{CALENDLY_BOOKING_EMAIL_SNIPPET}}",
-          "threadId": "{{GMAIL_THREAD_ID}}",
+          "sizeEstimate": 18058,
           "historyId": "{{GMAIL_HISTORY_ID}}",
           "internalDate": "{{GMAIL_INTERNAL_DATE}}",
-          "sizeEstimate": 18058
+          "labels": [
+            {
+              "id": "{{PINNED_ID}}",
+              "name": "INBOX"
+            },
+            {
+              "id": "{{PINNED_ID}}",
+              "name": "CATEGORY_UPDATES"
+            }
+          ],
+          "From": "{{EMAIL_FROM}}",
+          "Subject": "{{EMAIL_SUBJECT}}",
+          "To": "{{EMAIL_TO}}"
         }
       }
     ],
-    "Lead Research Agent": [
+    "Parse Calendly Booking": [
+      {
+        "json": {
+          "booking_event_id": "{{CALENDLY_BOOKING_EVENT_ID}}",
+          "gmail_thread_id": "{{GMAIL_THREAD_ID}}",
+          "meeting_title": "{{MEETING_TITLE}}",
+          "meeting_start": "{{MEETING_START_TIME}}",
+          "meeting_parse_status": "success",
+          "meeting_parse_error": "",
+          "prospect_name": "{{PROSPECT_NAME}}",
+          "first_name": "{{PROSPECT_FIRST_NAME}}",
+          "last_name": "{{PROSPECT_LAST_NAME}}",
+          "email": "{{PROSPECT_EMAIL}}",
+          "email_domain": "{{PROSPECT_EMAIL_DOMAIN}}",
+          "is_free_email": false,
+          "company_domain": "{{PROSPECT_COMPANY_DOMAIN}}",
+          "company_name": "{{PROSPECT_COMPANY_NAME}}",
+          "booking_notes": "{{BOOKING_NOTES}}",
+          "booking_source": "Calendly notification email",
+          "email_subject": "{{EMAIL_SUBJECT}}",
+          "extraction_status": "complete",
+          "missing_fields": [],
+          "processed_at": "{{TIMESTAMP}}"
+        }
+      }
+    ],
+    "Research Leads": [
       {
         "json": {
           "output": {
-            "city": "Munich",
-            "country": "Germany",
-            "website": "https://www.example-company.com/",
+            "enrichment_status": "enriched",
+            "enriched_company_name": "{{ENRICHED_COMPANY_NAME}}",
+            "website": "{{COMPANY_WEBSITE}}",
             "industry": "Financial Services",
-            "confidence": "high",
+            "employee_count": null,
+            "employee_range": null,
+            "country": "Germany",
+            "city": "Munich",
+            "business_model": null,
+            "sells_to_enterprise": true,
+            "funding_stage": null,
+            "company_linkedin_url": "{{COMPANY_LINKEDIN_URL}}",
+            "technologies": [],
             "source_urls": [
               "https://www.example-company.com/",
               "https://www.linkedin.com/company/example-company/"
             ],
-            "technologies": [],
-            "funding_stage": null,
-            "business_model": null,
-            "employee_count": null,
-            "employee_range": null,
-            "enrichment_error": null,
-            "enrichment_status": "enriched",
-            "sells_to_enterprise": true,
-            "company_linkedin_url": "https://www.linkedin.com/company/example-company/",
-            "enriched_company_name": "Example Company SE"
+            "confidence": "high",
+            "enrichment_error": null
           }
         },
         "pairedItem": {
@@ -1076,394 +1753,426 @@
         }
       }
     ],
-    "Compute ICP Score": [
+    "Calculate ICP Score": [
       {
         "json": {
-          "city": "Munich",
+          "booking_event_id": "{{CALENDLY_BOOKING_EVENT_ID}}",
+          "gmail_thread_id": "{{GMAIL_THREAD_ID}}",
+          "meeting_title": "{{MEETING_TITLE}}",
+          "meeting_start": "{{MEETING_START_TIME}}",
+          "meeting_parse_status": "success",
+          "meeting_parse_error": "",
+          "prospect_name": "{{PROSPECT_NAME}}",
+          "first_name": "{{PROSPECT_FIRST_NAME}}",
+          "last_name": "{{PROSPECT_LAST_NAME}}",
           "email": "{{PROSPECT_EMAIL}}",
-          "country": "Germany",
-          "website": "https://www.example-company.com/",
-          "icp_tier": "Low",
+          "email_domain": "{{PROSPECT_EMAIL_DOMAIN}}",
+          "is_free_email": false,
+          "company_domain": "{{PROSPECT_COMPANY_DOMAIN}}",
+          "company_name": "{{PROSPECT_COMPANY_NAME}}",
+          "booking_notes": "{{BOOKING_NOTES}}",
+          "booking_source": "Calendly notification email",
+          "email_subject": "{{EMAIL_SUBJECT}}",
+          "extraction_status": "complete",
+          "missing_fields": [],
+          "processed_at": "{{TIMESTAMP}}",
+          "contact_id": "{{HUBSPOT_CONTACT_ID}}",
+          "enrichment_status": "enriched",
+          "enrichment_source": "ai_web_research",
+          "enrichment_error": "",
+          "enriched_at": "{{TIMESTAMP}}",
+          "enriched_company_name": "{{ENRICHED_COMPANY_NAME}}",
+          "website": "{{COMPANY_WEBSITE}}",
           "industry": "Financial Services",
-          "icp_score": 35,
-          "last_name": "",
-          "confidence": "high",
-          "contact_id": "826991371459",
-          "first_name": "Sample Prospect",
-          "enriched_at": "2026-07-26T12:38:36.372Z",
-          "icp_reasons": "Sells to enterprise customers: +25\nEuropean company: +10",
+          "employee_count": null,
+          "employee_range": null,
+          "country": "Germany",
+          "city": "Munich",
+          "business_model": null,
+          "sells_to_enterprise": true,
+          "funding_stage": null,
+          "company_linkedin_url": "{{COMPANY_LINKEDIN_URL}}",
+          "technologies": [],
           "source_urls": [
             "https://www.example-company.com/",
             "https://www.linkedin.com/company/example-company/"
           ],
-          "company_name": "Example Company",
-          "email_domain": "example-company.com",
-          "processed_at": "2026-07-21T12:56:58.445Z",
-          "technologies": [],
-          "booking_notes": "We need ISO 27001 before October.",
-          "email_subject": "New Event: Sample Prospect - 03:30 Thu, 23 Jul 2026 - 30 Minute Meeting",
-          "funding_stage": null,
-          "is_free_email": false,
-          "meeting_start": "2026-07-23T03:30:00.000+02:00",
-          "meeting_title": "30 Minute Meeting",
-          "prospect_name": "Sample Prospect",
-          "booking_source": "Calendly notification email",
-          "business_model": null,
-          "company_domain": "example-company.com",
-          "employee_count": null,
-          "employee_range": null,
-          "missing_fields": [],
-          "gmail_thread_id": "19f700828474d58c",
-          "booking_event_id": "19f700828474d58c",
-          "enrichment_error": "",
-          "enrichment_source": "ai_web_research",
-          "enrichment_status": "enriched",
-          "extraction_status": "complete",
-          "meeting_parse_error": "",
-          "sells_to_enterprise": true,
-          "company_linkedin_url": "https://www.linkedin.com/company/example-company/",
-          "meeting_parse_status": "success",
-          "enriched_company_name": "Example Company SE"
+          "confidence": "high",
+          "icp_score": 35,
+          "icp_tier": "Low",
+          "icp_reasons": "Sells to enterprise customers: +25\nEuropean company: +10"
         },
         "pairedItem": {
           "item": 0
         }
       }
-    ],
-    "Parse Booking From Calendly": [
-      {
-        "json": {
-          "email": "{{PROSPECT_EMAIL}}",
-          "last_name": "{{PROSPECT_LAST_NAME}}",
-          "first_name": "{{PROSPECT_FIRST_NAME}}",
-          "company_name": "{{PROSPECT_COMPANY_NAME}}",
-          "email_domain": "{{PROSPECT_EMAIL_DOMAIN}}",
-          "processed_at": "{{PROCESSED_AT_TIMESTAMP}}",
-          "booking_notes": "{{BOOKING_NOTES}}",
-          "email_subject": "{{BOOKING_EMAIL_SUBJECT}}",
-          "is_free_email": false,
-          "meeting_start": "{{MEETING_START_TIME}}",
-          "meeting_title": "{{MEETING_TITLE}}",
-          "prospect_name": "{{PROSPECT_NAME}}",
-          "booking_source": "{{BOOKING_SOURCE}}",
-          "company_domain": "{{PROSPECT_COMPANY_DOMAIN}}",
-          "missing_fields": [],
-          "gmail_thread_id": "{{GMAIL_THREAD_ID}}",
-          "booking_event_id": "{{CALENDLY_BOOKING_EVENT_ID}}",
-          "extraction_status": "complete",
-          "meeting_parse_error": "",
-          "meeting_parse_status": "success"
-        }
-      }
     ]
   },
-  "settings": {
-    "timezone": "Europe/Paris",
-    "binaryMode": "separate",
-    "callerPolicy": "workflowsFromSameOwner",
-    "timeSavedMode": "fixed",
-    "availableInMCP": false,
-    "executionOrder": "v1",
-    "saveExecutionProgress": true
-  },
-  "versionId": "{{WORKFLOW_VERSION_ID}}",
   "connections": {
-    "Check Cache Availability": {
+    "Valid Prospect Booking?": {
       "main": [
         [
           {
-            "node": "Apply Cached Enrichment",
+            "node": "Upsert HubSpot Contact",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Wait 1 Second for Research",
+            "node": "Manual Review",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare HubSpot Notes Data": {
+    "Gmail Trigger": {
       "main": [
         [
           {
-            "node": "Check Booking Notes Presence",
+            "node": "Parse Calendly Booking",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gmail Sent Trigger": {
+    "Parse Calendly Booking": {
       "main": [
         [
           {
-            "node": "Parse Booking From Calendly",
+            "node": "Valid Prospect Booking?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Lead Research Agent": {
+    "Upsert HubSpot Contact": {
       "main": [
         [
           {
-            "node": "Process AI Enrichment Data",
+            "node": "HubSpot note",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Check for Business Email": {
+    "HubSpot note": {
       "main": [
         [
           {
-            "node": "Batch Process Companies",
+            "node": "Booking Notes Present?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Check Enrichment Success": {
+    "Booking Notes Present?": {
       "main": [
         [
           {
-            "node": "Compute ICP Score",
+            "node": "Create HubSpot Booking Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HubSpot Booking Note": {
+      "main": [
+        [
+          {
+            "node": "Business Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Email?": {
+      "main": [
+        [
+          {
+            "node": "Process One Company At A Time",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Prepare Manual Review Data",
+            "node": "Format Private Email Booking",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Llama-3.1 OpenAI Model": {
+    "Enrichment Found?": {
+      "main": [
+        [
+          {
+            "node": "Calculate ICP Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Manual Review: Enrichment Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate ICP Score": {
+      "main": [
+        [
+          {
+            "node": "Update Contact ICP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact ICP": {
+      "main": [
+        [
+          {
+            "node": "Build Meeting Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Meeting Briefing": {
+      "main": [
+        [
+          {
+            "node": "Send Meeting Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
       "ai_languageModel": [
         [
           {
-            "node": "Lead Research Agent",
+            "node": "Research Leads",
             "type": "ai_languageModel",
             "index": 0
           }
         ]
       ]
     },
-    "Patch HubSpot Contact ICP": {
+    "Research Leads": {
       "main": [
         [
           {
-            "node": "Set Meeting Briefing Details",
+            "node": "Normalize AI Enrichment",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Compute ICP Score": {
+    "Normalize AI Enrichment": {
       "main": [
         [
           {
-            "node": "Patch HubSpot Contact ICP",
+            "node": "Save Enrichment Cache",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Append Enrichment Cache to Sheets": {
-      "main": [
-        [
-          {
-            "node": "Restore Cache for Enrichment",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Apply Cached Enrichment": {
-      "main": [
-        [
-          {
-            "node": "Check Enrichment Success",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Booking Notes Presence": {
-      "main": [
-        [
-          {
-            "node": "Post to HubSpot Notes API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Set Meeting Briefing Details": {
-      "main": [
-        [
-          {
-            "node": "Send Email via Gmail",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Booking From Calendly": {
-      "main": [
-        [
-          {
-            "node": "Check Valid Prospect Booking",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Post to HubSpot Contacts API": {
-      "main": [
-        [
-          {
-            "node": "Prepare HubSpot Notes Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read Enrichment Cache From Sheets": {
-      "main": [
-        [
-          {
-            "node": "Check Cache Availability",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Process AI Enrichment Data": {
-      "main": [
-        [
-          {
-            "node": "Append Enrichment Cache to Sheets",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Initiate Company Search": {
-      "ai_tool": [
-        [
-          {
-            "node": "Lead Research Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Valid Prospect Booking": {
-      "main": [
-        [
-          {
-            "node": "Post to HubSpot Contacts API",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Set Manual Review Status",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Post to HubSpot Notes API": {
-      "main": [
-        [
-          {
-            "node": "Check for Business Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait 1 Second for Research": {
-      "main": [
-        [
-          {
-            "node": "Lead Research Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Batch Process Companies": {
-      "main": [
-        [],
-        [
-          {
-            "node": "Read Enrichment Cache From Sheets",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Enrichment Output": {
+    "Company Enrichment Output Parser": {
       "ai_outputParser": [
         [
           {
-            "node": "Lead Research Agent",
+            "node": "Research Leads",
             "type": "ai_outputParser",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare Manual Review Data": {
-      "main": [
+    "Search Company Research": {
+      "ai_tool": [
         [
           {
-            "node": "Batch Process Companies",
+            "node": "Research Leads",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One Company At A Time": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lookup Enrichment Cache",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Restore Cache for Enrichment": {
+    "Cache Found?": {
       "main": [
         [
           {
-            "node": "Check Enrichment Success",
+            "node": "Use Cached Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Company Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Company Research": {
+      "main": [
+        [
+          {
+            "node": "Research Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Enrichment Cache": {
+      "main": [
+        [
+          {
+            "node": "Cache Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Cached Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Enrichment Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Review: Enrichment Failed": {
+      "main": [
+        [
+          {
+            "node": "Build Meeting Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Enrichment After Cache Save": {
+      "main": [
+        [
+          {
+            "node": "Enrichment Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Enrichment Cache": {
+      "main": [
+        [
+          {
+            "node": "Restore Enrichment After Cache Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Meeting Briefing": {
+      "main": [
+        [
+          {
+            "node": "Process One Company At A Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Private Email Booking": {
+      "main": [
+        [
+          {
+            "node": "Append Private Email Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Private Email Booking": {
+      "main": [
+        [
+          {
+            "node": "Send Private Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Review": {
+      "main": [
+        [
+          {
+            "node": "Send Manual Review Alert",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Europe/Paris",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "{{WORKFLOW_VERSION_ID}}",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "{{N8N_INSTANCE_ID}}"
+  },
+  "id": "{{WORKFLOW_ID}}",
+  "tags": []
 }
