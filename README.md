@@ -1,6 +1,6 @@
 # Calendly Booking Intake to HubSpot with AI Enrichment and ICP Scoring
 
-This repository contains a sanitized n8n workflow for automating Calendly booking intake into HubSpot.
+This repository contains a n8n workflow for automating Calendly booking intake into HubSpot.
 
 The workflow parses Calendly booking emails from Gmail, validates prospect bookings, creates or updates HubSpot contacts, records booking notes, enriches business-email leads with AI-assisted web research, calculates ICP fit, and sends a meeting briefing by Gmail.
 
