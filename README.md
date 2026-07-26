@@ -3,10 +3,11 @@
 This repository contains a n8n workflow for automating Calendly booking intake into HubSpot.
 
 The workflow parses Calendly booking emails from Gmail, validates prospect bookings, creates or updates HubSpot contacts, records booking notes, enriches business-email leads with AI-assisted web research, calculates ICP fit, and sends a meeting briefing by Gmail.
-<img width="710" height="359" alt="image" src="https://github.com/user-attachments/assets/80ed0a16-2589-44d0-9f30-695c77cf8b8b" />
+<img width="926" height="291" alt="image" src="https://github.com/user-attachments/assets/283adfe0-95bf-452e-82df-f19950fca7b9" />
 
-<img width="1137" height="299" alt="image" src="https://github.com/user-attachments/assets/ebae9d52-10d7-4ebc-b89d-e3cd9fda6de7" />
+<img width="1099" height="496" alt="image" src="https://github.com/user-attachments/assets/a353d7b4-19d9-4e47-851f-871c6e3c5f70" />
 
+<img width="877" height="646" alt="image" src="https://github.com/user-attachments/assets/d6b0e262-9da9-4fd1-8c93-493bddc517fe" />
 
 ## Workflow File
 
