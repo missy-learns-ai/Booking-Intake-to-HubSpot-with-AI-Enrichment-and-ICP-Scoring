@@ -1,4 +1,4 @@
-# Calendly Booking Intake to HubSpot with AI Enrichment and ICP Scoring
+# AI-Powered Calendly to HubSpot Lead Intake with Enrichment and ICP Scoring
 
 This repository contains a n8n workflow for automating Calendly booking intake into HubSpot.
 
